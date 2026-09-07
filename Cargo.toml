@@ -1,0 +1,13 @@
+[package]
+name = "cx"
+version = "0.1.0"
+edition = "2021"
+description = "century index — daily fix, historical reconstruction, publication"
+
+# zero dependencies: network IO shells out to curl, parsers are purpose-built,
+# index arithmetic is integer fixed-point.
+[dependencies]
+
+[profile.release]
+opt-level = 2
+panic = "abort"

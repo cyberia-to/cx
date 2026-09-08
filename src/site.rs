@@ -31,9 +31,8 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
         .collect();
 
     let readout = format!(
-        "fix of {} · rent written as 1 CX then invoices ${} today",
-        format_date(day),
-        format_thousands(level, 2)
+        "dollars per CX · fix of {} · hover the line for any day",
+        format_date(day)
     );
 
     let views_json: String = {

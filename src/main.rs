@@ -5,6 +5,7 @@
 //! the arithmetic is integer fixed-point throughout, so the same day's data
 //! yields the same index on any machine.
 
+mod calculator;
 mod chart;
 mod fetch;
 mod graph;

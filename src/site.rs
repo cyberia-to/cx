@@ -273,6 +273,15 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
   </section>
 
   <section>
+    <h2>Pricer</h2>
+    <p class="note">What the index is for: a ground lease takes part of its economics as a
+    premium up front and the rest as rent, indexed for the life of the contract. Move the
+    sliders to see what the split costs, and what a review clause buys when land outruns
+    the indexation.</p>
+    {calc}
+  </section>
+
+  <section>
     <h2>Sources</h2>
     <div class="note">
       This published series is a reconstruction from free public data, not the contractual
@@ -359,6 +368,7 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
         legs = legs_html,
         drift = drift_html,
         views = views_json,
+        calc = crate::calculator::html(),
     );
 
     Ok(page)

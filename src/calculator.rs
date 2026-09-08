@@ -63,7 +63,7 @@ const LIVE=['L','T','p','cpi'];
 const DEFS=[
  ['deal','Your lease'],
  ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
- ['T','Term',5,99,1,' yr','The standard term'],
+ ['T','Term',5,99,1,' yr','How many years the lease runs'],
  ['p','Premium (share of economics)',0,100,5,'%','Yours to choose: how much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
  ['world','What the world does'],
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],

@@ -29,7 +29,7 @@ const TEMPLATE: &str = r##"<div id="lcalc"></div>
 #lcalc .panel{background:var(--s2);border:1px solid var(--ln);border-radius:10px;padding:14px}
 #lcalc .ctrl{flex:1 1 240px;min-width:220px}
 #lcalc .out{flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:12px}
-#lcalc h4{font-size:11px;color:var(--mut);letter-spacing:1.5px;text-transform:uppercase;margin:14px 0 10px;font-weight:400}
+#lcalc h4{font-size:13px;color:var(--tx);letter-spacing:1.2px;text-transform:uppercase;margin:14px 0 10px;font-weight:400}
 #lcalc h4:first-child{margin-top:0}
 #lcalc .row{margin-bottom:12px}
 #lcalc .row .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;gap:8px}

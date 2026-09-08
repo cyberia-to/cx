@@ -32,6 +32,9 @@ const TEMPLATE: &str = r##"<div id="lcalc"></div>
 #lcalc h4{font-size:13px;color:var(--tx);letter-spacing:1.2px;text-transform:uppercase;margin:14px 0 10px;font-weight:400}
 #lcalc h4:first-child{margin-top:0}
 #lcalc .row{margin-bottom:12px}
+#lcalc .row.fixed{padding-bottom:10px;border-bottom:1px solid var(--ln)}
+#lcalc .row.fixed .val{color:var(--tx)}
+#lcalc .row.live .val{color:var(--jade)}
 #lcalc .row .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;gap:8px}
 #lcalc label{font-size:12px;color:var(--mut)}
 #lcalc .val{font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -54,11 +57,14 @@ const P={L:100000,T:25,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
+// only the indexation moves: everything else is the standard deal and the
+// estate's underwriting, shown as the fixed figures they are
+const LIVE=['cpi'];
 const DEFS=[
- ['choose','What you choose'],
+ ['deal','The deal'],
  ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
- ['T','Term',5,99,1,' yr','Longer term, more value in the lease and a longer rent stream'],
- ['p','Premium (share of economics)',0,100,5,'%','The one dial that is genuinely yours: pay more at signing and owe less rent, or keep the cash and carry the rent. 100% is the upfront instrument, 0% is pure rent'],
+ ['T','Term',5,99,1,' yr','The standard term'],
+ ['p','Premium (share of economics)',0,100,5,'%','How much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
  ['world','What the world does'],
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
  ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Nobody sets this; Bali has historically outrun CPI'],
@@ -70,8 +76,9 @@ let html='';
 for(const d of DEFS){
  if(d.length===2){html+='<h4>'+d[1]+'</h4>';continue}
  const[id,lab,mn,mx,st,suf,hint]=d;
- html+='<div class=row><div class=top><label>'+lab+'</label><span class=val id=v_'+id+'></span></div>'
- +'<input type=range id=in_'+id+' min='+mn+' max='+mx+' step='+st+' value='+P[id]+'>'
+ const live=LIVE.includes(id);
+ html+='<div class="row'+(live?' live':' fixed')+'"><div class=top><label>'+lab+'</label><span class=val id=v_'+id+'></span></div>'
+ +(live?'<input type=range id=in_'+id+' min='+mn+' max='+mx+' step='+st+' value='+P[id]+'>':'')
  +(hint?'<div class=hint>'+hint+'</div>':'')+'</div>';
 }
 root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
@@ -133,7 +140,7 @@ function render(){
   +stat('Lease at the end',fmt(c.leaseEnd),'growth '+P.g+'%/yr over '+P.T+' years');
  document.getElementById('lchart').innerHTML=chart(c.rows);
 }
-for(const d of DEFS){if(d.length===2)continue;const id=d[0];
+for(const id of LIVE){
  document.getElementById('in_'+id).addEventListener('input',e=>{P[id]=parseFloat(e.target.value);render()});}
 render();
 })();
@@ -211,11 +218,23 @@ mod audience_tests {
     }
 
     #[test]
+    fn only_the_indexation_can_be_moved() {
+        let h = html("35");
+        // a slider invites negotiation; the deal and the underwriting are not
+        // negotiable here, so they must not look like controls. ids are built
+        // by concatenation at runtime, so assert on what the template emits.
+        assert_eq!(h.matches("<input type=range").count(), 1, "more than one control");
+        assert!(h.contains("LIVE=['cpi']"), "the live list is not just the index");
+        assert!(h.contains("for(const id of LIVE)"), "listeners are not bound to LIVE");
+        assert!(h.contains("live?'<input type=range"), "the control is not gated on LIVE");
+        assert!(h.contains("row.fixed"), "fixed rows are not styled as stated figures");
+    }
+
+    #[test]
     fn the_dials_are_grouped_by_who_holds_them() {
         let h = html("35");
-        // a reader must be able to tell their own choices from the estate's
-        // underwriting; mixing them prices a deal the tenant cannot steer
-        let choose = h.find("What you choose").expect("tenant group");
+        // a reader must be able to tell the deal from the estate's underwriting
+        let choose = h.find("The deal").expect("deal group");
         let world = h.find("What the world does").expect("world group");
         let estate = h.find("How the estate prices it").expect("estate group");
         assert!(choose < world && world < estate, "groups out of order");

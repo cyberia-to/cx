@@ -281,11 +281,10 @@ pub fn render(
     <h2>Pricer</h2>
     <p class="note">What the index is for. The product is a leasehold — the right to use a
     parcel for a term, never its title. Part of its value is taken as a premium at signing,
-    the rest returned as rent, indexed for the life of the contract. Move the sliders to see
-    what that split costs, and what a review clause buys when the parcel appreciates faster
-    than the indexation. The dials are grouped by who holds them: what a tenant chooses, what
-    the world decides, and what the estate sets when it underwrites — the last are shown so
-    the price can be checked rather than taken on faith.</p>
+    the rest returned as rent, indexed for the life of the contract. One thing moves: the indexation, so the
+    lease can be stress-tested across the collar. The deal and the estate's underwriting are
+    stated as the fixed figures they are, shown so the price can be checked rather than taken
+    on faith.</p>
     {calc}
   </section>
 

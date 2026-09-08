@@ -57,9 +57,9 @@ const P={L:100000,T:25,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
-// only the indexation moves: everything else is the standard deal and the
-// estate's underwriting, shown as the fixed figures they are
-const LIVE=['cpi'];
+// the client's side is theirs to move, and the indexation is the scenario to
+// stress-test. what the estate underwrites and what the world does stay put
+const LIVE=['L','T','p','cpi'];
 const DEFS=[
  ['deal','Your lease'],
  ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
@@ -218,13 +218,12 @@ mod audience_tests {
     }
 
     #[test]
-    fn only_the_indexation_can_be_moved() {
+    fn the_client_moves_their_own_terms_and_the_scenario() {
         let h = html("35");
-        // a slider invites negotiation; the deal and the underwriting are not
-        // negotiable here, so they must not look like controls. ids are built
-        // by concatenation at runtime, so assert on what the template emits.
-        assert_eq!(h.matches("<input type=range").count(), 1, "more than one control");
-        assert!(h.contains("LIVE=['cpi']"), "the live list is not just the index");
+        // price, term and premium are the client's to set; the indexation is
+        // the scenario. the estate's underwriting is not negotiable here and
+        // must not look like a control.
+        assert!(h.contains("LIVE=['L','T','p','cpi']"), "the client lost a control");
         assert!(h.contains("for(const id of LIVE)"), "listeners are not bound to LIVE");
         assert!(h.contains("live?'<input type=range"), "the control is not gated on LIVE");
         assert!(h.contains("row.fixed"), "fixed rows are not styled as stated figures");

@@ -1,7 +1,7 @@
 //! the ground-lease pricer, ported from the graph.
 //!
 //! the model is unchanged from `cyber-valley/strategy/lease-pricer.md`
-//! (commit 5387526): leasehold economics = k × freehold; the premium takes p of
+//! (commit 5387526): leasehold economics = k × the land value; the premium takes p of
 //! it upfront, the remainder returns as indexed rent discounted at
 //! `r = r_base + spread·(1−p)` — a smaller premium shifts value into the rent
 //! stream and raises the rate, pricing the tenant's default risk. review every
@@ -52,9 +52,9 @@ const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
 const DEFS=[
  ['deal','Deal'],
- ['FH','Freehold today',20000,2000000,10000,'$',''],
+ ['FH','Land value today',20000,2000000,10000,'$','The valuation basis — what the parcel is worth outright. It is not what is sold: the product is the leasehold on it, worth k of this over the term'],
  ['T','Term',5,99,1,' yr',''],
- ['k','Relativity k',50,99,1,'%','Share of freehold over the term of use: 30y is about 87%, 50y about 95%'],
+ ['k','Relativity k',50,99,1,'%','Share of the land value the leasehold carries over its term: 30y is about 87%, 50y about 95%'],
  ['p','Premium (share of economics)',0,100,5,'%','A smaller premium leaves more cash with the business and shifts value into the rent'],
  ['rates','Rates'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%',''],
@@ -62,7 +62,7 @@ const DEFS=[
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
  ['grow','Protection from land growth'],
  ['g','Land growth g',0,20,0.5,'%','Bali has historically outrun CPI'],
- ['N','Review every',1,15,1,' yr','Rent = max(indexed path, X% of market freehold at the review); X is the starting yield, so the lessor keeps the same position in the land']];
+ ['N','Review every',1,15,1,' yr','Rent = max(indexed path, X% of the land value at the review); X is the starting yield, so the lessor keeps the same position in the land']];
 let html='';
 for(const d of DEFS){
  if(d.length===2){html+='<h4>'+d[1]+'</h4>';continue}
@@ -119,7 +119,7 @@ function render(){
   document.getElementById('v_'+id).textContent=(d[5]==='$'?full(P[id]):P[id]+d[5]);}
  const c=calc(), gain=c.takeR-c.takeI;
  document.getElementById('st1').innerHTML=
-  stat('Premium (first payment)',fmt(c.premium),P.p+'% of '+fmt(c.totalPV)+' of economics','var(--jade)')
+  stat('Premium (first payment)',fmt(c.premium),P.p+'% of '+fmt(c.totalPV)+' of leasehold value','var(--jade)')
   +stat('Rent, year 1',fmt(c.rent1)+'/yr','yield '+pct(c.yld,2)+' · rate '+pct(c.rAdj))
   +stat('PV of the deal',fmt(c.takeR),'vs '+fmt(c.takeI)+' without review');
  document.getElementById('st2').innerHTML=
@@ -176,5 +176,20 @@ mod default_tests {
         assert!(h.contains("cpi:35"), "default not seeded");
         assert!(!h.contains("__INDEXATION__"), "placeholder survived");
         assert!(h.contains("'Indexation',-15,35,0.5"), "slider does not span the collar");
+    }
+}
+
+#[cfg(test)]
+mod vocabulary_tests {
+    use super::*;
+
+    #[test]
+    fn the_land_value_is_a_basis_not_a_product() {
+        let h = html("35");
+        // the page sells a leasehold; the freehold figure is only the basis it
+        // is priced from, and the interface must not suggest otherwise
+        assert!(h.contains("'Land value today'"));
+        assert!(!h.contains("Freehold today"));
+        assert!(h.contains("the product is the leasehold on it"));
     }
 }

@@ -238,10 +238,10 @@ fn run() -> Result<(), String> {
 
     std::fs::create_dir_all(&args.out_dir).map_err(|e| e.to_string())?;
 
-    // weekly stride keeps the embedded series small while holding the shape
-    let chart = chart::render(&idx.level, 7);
+    // one view per range: 7d, 1m, 1y, all
+    let views = chart::render_views(&idx.level);
 
-    let html = site::render(&idx, &twaps, &chart)?;
+    let html = site::render(&idx, &twaps, &views)?;
     let json = site::render_json(&idx, &twaps, &coverage);
     let history = graph::render_history(&idx, &twaps, &coverage)?;
     let readme = graph::render_readme(&idx, &twaps)?;

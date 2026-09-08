@@ -1,8 +1,8 @@
 //! the published page at cyberia.my/cx and the machine-readable fix beside it.
 
-use crate::chart::Chart;
+use crate::chart::View;
 use crate::index::{Group, Index};
-use crate::num::{fdiv, format_date, format_fixed, format_thousands, SCALE};
+use crate::num::{format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
 fn group_class(g: Group) -> &'static str {
@@ -13,18 +13,47 @@ fn group_class(g: Group) -> &'static str {
     }
 }
 
-/// percentage change between two levels, in fixed point.
-fn change_pct(now: i128, then: i128) -> Option<i128> {
-    let ratio = fdiv(now - then, then)?;
-    Some(ratio * 100)
-}
-
-pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<String, String> {
+pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<String, String> {
     let (day, level) = idx.latest().ok_or("no index level")?;
-    let shares = idx.current_shares(twaps);
+    let first = views.first().ok_or("no chart views")?;
 
-    let year_ago = idx.level_before(365).and_then(|then| change_pct(level, then));
-    let since_base = change_pct(level, crate::index::BASE_LEVEL);
+    let tabs_html: String = views
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            format!(
+                "<button class=\"tab{}\" data-range=\"{}\" role=\"tab\">{}</button>",
+                if i == 0 { " on" } else { "" },
+                v.key,
+                v.label
+            )
+        })
+        .collect();
+
+    let readout = format!(
+        "fix of {} · hover the line for a day",
+        format_date(day)
+    );
+
+    let views_json: String = {
+        let mut out = String::from("{");
+        for (i, v) in views.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&format!(
+                "\"{}\":{{\"svg\":\"{}\",\"pts\":{},\"log\":{}}}",
+                v.key,
+                v.svg.replace('\\', "\\\\").replace('"', "\\\""),
+                v.points_json,
+                v.logarithmic
+            ));
+        }
+        out.push('}');
+        out
+    };
+    let _ = first;
+    let shares = idx.current_shares(twaps);
 
     let mut legs_html = String::new();
     for (q, (leg, share)) in idx.quantities.iter().zip(shares.iter()) {
@@ -95,26 +124,6 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<Str
         })
         .collect();
 
-    let delta_html = match year_ago {
-        Some(v) => format!(
-            "<span class=\"delta {}\">{}{}% · 12 months</span>",
-            if v >= 0 { "up" } else { "down" },
-            if v >= 0 { "+" } else { "" },
-            format_fixed(v, 1)
-        ),
-        None => String::new(),
-    };
-
-    let since_html = match since_base {
-        Some(v) => format!(
-            "{}{}% since {}",
-            if v >= 0 { "+" } else { "" },
-            format_fixed(v, 1),
-            format_date(idx.base_day)
-        ),
-        None => String::new(),
-    };
-
     let page = format!(
         r##"<!doctype html>
 <html lang="en">
@@ -143,9 +152,12 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<Str
 
   .hero{{border-top:2px solid var(--green);padding-top:14px;display:flex;flex-direction:column;gap:4px}}
   .hero b{{font-size:52px;line-height:1;font-weight:700}}
-  .hero .row{{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;font-size:14px;color:var(--mute)}}
-  .delta.up{{color:var(--green)}}
-  .delta.down{{color:#e06060}}
+  .tabs{{display:flex;gap:6px;margin-top:10px}}
+  .tabs button{{font-family:inherit;font-size:13px;letter-spacing:.04em;color:var(--mute);
+    background:none;border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer;
+    transition:color .15s,border-color .15s}}
+  .tabs button:hover{{color:var(--ink)}}
+  .tabs button.on{{color:var(--bg);background:var(--green);border-color:var(--green)}}
 
   .chart{{width:100%;height:200px;overflow:visible}}
   .chart .line{{fill:none;stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}}
@@ -206,12 +218,13 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<Str
 
   <div class="hero">
     <b>{level}</b>
-    <div class="row"><span>fix of {date}</span>{delta}<span>{since}</span></div>
+    <div class="tabs" role="tablist">{tabs}</div>
   </div>
 
   <section>
-    {chart_svg}
-    <div class="readout" id="readout">base 100 on {base_date} · logarithmic · hover the line for a day</div>
+    <svg class="chart" id="chart" viewBox="0 0 1000 320" preserveAspectRatio="none"
+         role="img" aria-label="CX index level">{chart_svg}</svg>
+    <div class="readout" id="readout">{readout}</div>
   </section>
 
   <section>
@@ -278,17 +291,25 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<Str
 </main>
 <script>
 (() => {{
-  const pts = {points};
-  const svg = document.querySelector('.chart');
-  const hover = svg && svg.querySelector('.hover');
-  const cross = hover && hover.querySelector('.cross');
-  const dot = hover && hover.querySelector('.dot');
+  const views = {views};
+  const svg = document.getElementById('chart');
   const readout = document.getElementById('readout');
-  if (!svg || !hover || !pts.length) return;
   const rest = readout.textContent;
-  const firstDay = {first_day}, stepDays = {step_days};
-  const iso = (d) => new Date(d * 86400000).toISOString().slice(0, 10);
+  let pts = [];
+
+  const bind = (key) => {{
+    const view = views[key];
+    if (!view) return;
+    svg.innerHTML = view.svg;
+    pts = view.pts;
+  }};
+
   const at = (evt) => {{
+    if (!pts.length) return;
+    const hover = svg.querySelector('.hover');
+    const cross = svg.querySelector('.cross');
+    const dot = svg.querySelector('.dot');
+    if (!hover) return;
     const box = svg.getBoundingClientRect();
     const x = ((evt.touches ? evt.touches[0].clientX : evt.clientX) - box.left) / box.width * 1000;
     let best = 0;
@@ -299,31 +320,43 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], chart: &Chart) -> Result<Str
     cross.setAttribute('x1', p[0]); cross.setAttribute('x2', p[0]);
     dot.setAttribute('cx', p[0]); dot.setAttribute('cy', p[1]);
     hover.style.display = '';
-    readout.innerHTML = '<b>' + p[2] + '</b> · ' + iso(firstDay + best * stepDays);
+    readout.innerHTML = '<b>' + p[2] + '</b> · ' + p[3];
   }};
+
+  const clear = () => {{
+    const hover = svg.querySelector('.hover');
+    if (hover) hover.style.display = 'none';
+    readout.textContent = rest;
+  }};
+
   svg.addEventListener('mousemove', at);
   svg.addEventListener('touchmove', at, {{passive: true}});
-  const clear = () => {{ hover.style.display = 'none'; readout.textContent = rest; }};
   svg.addEventListener('mouseleave', clear);
   svg.addEventListener('touchend', clear);
+
+  document.querySelectorAll('.tabs button').forEach((b) => {{
+    b.addEventListener('click', () => {{
+      document.querySelectorAll('.tabs button').forEach((o) => o.classList.remove('on'));
+      b.classList.add('on');
+      clear();
+      bind(b.dataset.range);
+    }});
+  }});
 }})();
 </script>
 </body>
 </html>
 "##,
         level = format_thousands(level, 2),
-        date = format_date(day),
         base_date = format_date(idx.base_day),
-        delta = delta_html,
-        since = since_html,
-        chart_svg = chart.svg,
+        tabs = tabs_html,
+        readout = readout,
+        chart_svg = views[0].svg,
         bar = bar_html,
         chips = chips_html,
         legs = legs_html,
         drift = drift_html,
-        points = chart.points_json,
-        first_day = chart.first_day,
-        step_days = chart.step_days,
+        views = views_json,
     );
 
     Ok(page)

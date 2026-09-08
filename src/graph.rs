@@ -56,7 +56,7 @@ pub fn render_history(
     body.push_str("# cx history\n\n");
     body.push_str(&format!(
         "the published level of the [[century-index]] over the decade ending {}. \
-         base 100 on {}; the latest fix reads {}. every price enters as a trailing \
+         one CX is the basket that cost $1 on {}; today it costs ${}. every price enters as a trailing \
          365-day average, so the series moves at the pace of a year, not a day — \
          which is what a century-scale obligation asks of it.\n\n",
         format_date(last_day),
@@ -98,7 +98,7 @@ pub fn render_history(
         body.push_str(&format!(
             "| {} | {} | {} | {} | {}% |\n",
             q.leg.ticker,
-            format_thousands(q.quantity, q.leg.quantity_places()),
+            format_thousands(q.quantity, q.leg.quantity_places(q.quantity)),
             q.leg.unit,
             format_thousands(q.base_fix, q.leg.fix_places()),
             format_fixed(q.leg.weight_bp * SCALE / 100, 0)
@@ -201,9 +201,10 @@ pub fn render_readme(idx: &Index, twaps: &[(&str, Daily)]) -> Result<String, Str
     );
     body.push_str("# cx\n\n");
     body.push_str(&format!(
-        "the published fix of the [[century-index]] — ticker CX. the protocol page defines \
-         the instrument; this subgraph carries what it actually read. latest fix {} on {}, \
-         base 100 on {}.\n\n",
+        "the published fix of the [[century-index]] — ticker CX. one CX is the basket that \
+         cost one dollar on the base date, so the level is a price: ${} on {}, against $1 \
+         on {}. the protocol page defines the instrument; this subgraph carries what it \
+         actually read.\n\n",
         format_thousands(last_level, 2),
         format_date(last_day),
         format_date(idx.base_day)

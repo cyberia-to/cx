@@ -7,8 +7,10 @@
 use crate::num::{fdiv, fmul, SCALE};
 use crate::series::Daily;
 
-/// the index reads 100 on its base date.
-pub const BASE_LEVEL: i128 = 100 * SCALE;
+/// one CX is what the basket cost on the base date: a dollar. the level is
+/// therefore a price — "1 CX = $69.03" — rather than an abstract index number,
+/// so a lease written at 100 CX reads straight off it.
+pub const BASE_LEVEL: i128 = SCALE;
 
 /// the trailing window of §3: every price enters as a 365-day average.
 pub const TWAP_WINDOW: usize = 365;
@@ -114,12 +116,15 @@ impl Leg {
         }
     }
 
-    /// decimals when printing this leg's quantity.
-    pub fn quantity_places(&self) -> u32 {
-        match self.ticker {
-            "BTC" | "ETH" => 6,
-            "CNY" | "USD" => 2,
-            _ => 6,
+    /// decimals when printing a quantity: enough for four significant digits,
+    /// whether the leg holds a yuan or a fraction of a tonne.
+    pub fn quantity_places(&self, value: i128) -> u32 {
+        let v = value.abs();
+        match v {
+            _ if v >= SCALE => 3,
+            _ if v >= SCALE / 100 => 5,
+            _ if v >= SCALE / 10_000 => 7,
+            _ => 9,
         }
     }
 }

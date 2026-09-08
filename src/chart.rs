@@ -200,6 +200,18 @@ fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Opti
         PAD_T + plot_h - (t * plot_h as f64).round() as i64
     };
 
+    // a log ladder lands on whole numbers; a linear step decides its own places
+    let places = if logarithmic {
+        0
+    } else {
+        let step = ticks.windows(2).map(|w| w[1] - w[0]).min().unwrap_or(SCALE);
+        match step {
+            s if s >= SCALE => 0,
+            s if s >= SCALE / 10 => 1,
+            _ => 2,
+        }
+    };
+
     let mut svg = String::new();
     for tick in &ticks {
         let y = y_of(*tick);
@@ -210,7 +222,6 @@ fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Opti
             "<line class=\"grid\" x1=\"{PAD_L}\" y1=\"{y}\" x2=\"{}\" y2=\"{y}\"/>",
             PAD_L + plot_w
         ));
-        let places = if *tick < 10 * SCALE { 1 } else { 0 };
         svg.push_str(&format!(
             "<text class=\"tick\" x=\"{}\" y=\"{}\">{}</text>",
             PAD_L + plot_w + 8,

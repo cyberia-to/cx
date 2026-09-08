@@ -31,8 +31,9 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
         .collect();
 
     let readout = format!(
-        "fix of {} · hover the line for a day",
-        format_date(day)
+        "fix of {} · rent written as 1 CX then invoices ${} today",
+        format_date(day),
+        format_thousands(level, 2)
     );
 
     let views_json: String = {
@@ -69,7 +70,7 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
             cls = group_class(leg.group),
             ticker = leg.ticker,
             fix = format_thousands(fix, leg.fix_places()),
-            qty = format_thousands(q.quantity, leg.quantity_places()),
+            qty = format_thousands(q.quantity, leg.quantity_places(q.quantity)),
             weight = leg.weight_bp / 100,
             share = format_fixed(*share * SCALE / 100, 1),
         ));
@@ -152,7 +153,8 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
 
   .hero{{border-top:2px solid var(--green);padding-top:14px;display:flex;flex-direction:column;gap:4px}}
   .hero b{{font-size:52px;line-height:1;font-weight:700}}
-  .tabs{{display:flex;gap:6px;margin-top:10px}}
+  .hero .unit{{font-size:14px;color:var(--mute);margin-top:6px}}
+  .tabs{{display:flex;gap:6px;margin-top:14px}}
   .tabs button{{font-family:inherit;font-size:13px;letter-spacing:.04em;color:var(--mute);
     background:none;border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer;
     transition:color .15s,border-color .15s}}
@@ -217,7 +219,8 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
   <h1>CX<span>century index</span></h1>
 
   <div class="hero">
-    <b>{level}</b>
+    <b>${level}</b>
+    <div class="unit">for 1 CX — the basket that cost $1 on {base_date}</div>
     <div class="tabs" role="tablist">{tabs}</div>
   </div>
 
@@ -243,7 +246,7 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
       <thead><tr><th>leg</th><th class="n">fix (USD)</th><th class="n">quantity</th><th class="n">weight</th><th class="n">share now</th></tr></thead>
       <tbody>{legs}</tbody>
     </table>
-    <div class="note">Weight is what a lease is written at; share is what the leg has become.
+    <div class="note">Quantities are what one CX holds. Weight is what a lease is written at; share is what the leg has become.
     Quantities were fixed on {base_date} and never change, so the shares drift with prices —
     over this decade the basket ran to {drift}. A lease signed today starts at the weights, not the drift.
     Every fix is a trailing 365-day average.</div>
@@ -320,7 +323,7 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
     cross.setAttribute('x1', p[0]); cross.setAttribute('x2', p[0]);
     dot.setAttribute('cx', p[0]); dot.setAttribute('cy', p[1]);
     hover.style.display = '';
-    readout.innerHTML = '<b>' + p[2] + '</b> · ' + p[3];
+    readout.innerHTML = '<b>$' + p[2] + '</b> · ' + p[3];
   }};
 
   const clear = () => {{
@@ -375,7 +378,8 @@ pub fn render_json(
     let mut out = String::from("{\n");
     out.push_str(&format!("  \"index\": \"CX\",\n"));
     out.push_str(&format!("  \"base_date\": \"{}\",\n", format_date(idx.base_day)));
-    out.push_str("  \"base_level\": 100,\n");
+    out.push_str("  \"base_level\": 1,\n");
+    out.push_str("  \"unit\": \"USD per CX\",\n");
     out.push_str(&format!("  \"date\": \"{}\",\n", format_date(day)));
     out.push_str(&format!("  \"level\": {},\n", format_fixed(level, 4)));
     out.push_str("  \"twap_days\": 365,\n");

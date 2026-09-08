@@ -11,9 +11,13 @@
 //! only the labels and the palette were touched: english for a published page,
 //! and the tokens of the site it now lives on.
 
-/// the whole block — markup, scoped styles, and the vanilla-js model.
-pub fn html() -> &'static str {
-    r##"<div id="lcalc"></div>
+/// the whole block. `indexation_default` seeds the indexation slider with what
+/// the index actually delivered, clamped into the collar band it now spans.
+pub fn html(indexation_default: &str) -> String {
+    TEMPLATE.replace("__INDEXATION__", indexation_default)
+}
+
+const TEMPLATE: &str = r##"<div id="lcalc"></div>
 <style>
 #lcalc{--s1:#0a0a0a;--s2:#111;--ln:#1f1f1f;--tx:#f2f2f2;--mut:#8a8a8a;--jade:#79ff4f;--amb:#c98500;--red:#e06060;
  background:var(--s1);color:var(--tx);font-family:'Play',sans-serif;border:1px solid var(--ln);border-radius:12px;padding:16px}
@@ -42,7 +46,7 @@ pub fn html() -> &'static str {
 <script>
 (function(){
 const root=document.getElementById('lcalc');
-const P={FH:100000,T:30,k:87,p:20,rBase:9,spread:5,cpi:4,g:10,N:5};
+const P={FH:100000,T:30,k:87,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
@@ -55,7 +59,7 @@ const DEFS=[
  ['rates','Rates'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%',''],
  ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','Default risk rises as the premium shrinks'],
- ['cpi','Indexation',0,15,0.5,'%',''],
+ ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
  ['grow','Protection from land growth'],
  ['g','Land growth g',0,20,0.5,'%','Bali has historically outrun CPI'],
  ['N','Review every',1,15,1,' yr','Rent = max(indexed path, X% of market freehold at the review); X is the starting yield, so the lessor keeps the same position in the land']];
@@ -128,8 +132,7 @@ for(const d of DEFS){if(d.length===2)continue;const id=d[0];
  document.getElementById('in_'+id).addEventListener('input',e=>{P[id]=parseFloat(e.target.value);render()});}
 render();
 })();
-</script>"##
-}
+</script>"##;
 
 #[cfg(test)]
 mod tests {
@@ -137,7 +140,7 @@ mod tests {
 
     #[test]
     fn carries_the_model_and_its_controls() {
-        let h = html();
+        let h = html("4");
         // every input of the original model survives the port
         for id in ["FH", "T", "k", "p", "rBase", "spread", "cpi", "g", "N"] {
             assert!(h.contains(&format!("['{id}'")), "missing control {id}");
@@ -151,14 +154,27 @@ mod tests {
     #[test]
     fn is_published_in_english() {
         // the graph copy was russian; a published page is not
-        assert!(!html().chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)));
+        assert!(!html("4").chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)));
     }
 
     #[test]
     fn scopes_its_own_ids() {
         // the page already owns #chart; the pricer must not collide with it
-        let h = html();
+        let h = html("4");
         assert!(h.contains("lchart"));
         assert!(!h.contains("getElementById('chart')"));
+    }
+}
+
+#[cfg(test)]
+mod default_tests {
+    use super::*;
+
+    #[test]
+    fn the_indexation_default_is_injected_and_the_band_is_the_collar() {
+        let h = html("35");
+        assert!(h.contains("cpi:35"), "default not seeded");
+        assert!(!h.contains("__INDEXATION__"), "placeholder survived");
+        assert!(h.contains("'Indexation',-15,35,0.5"), "slider does not span the collar");
     }
 }

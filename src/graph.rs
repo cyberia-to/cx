@@ -3,7 +3,7 @@
 //! the graph holds the record: what the index is, what it read on each month
 //! of the published decade, and where every number came from.
 
-use crate::index::Index;
+use crate::index::{Anniversary, Index};
 use crate::num::{civil_from_days, fdiv, format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
@@ -44,9 +44,12 @@ pub fn render_history(
     idx: &Index,
     twaps: &[(&str, Daily)],
     coverage: &[(&str, String, usize)],
+    path: &[Anniversary],
+    annual_rate: i128,
 ) -> Result<String, String> {
     let (last_day, last_level) = idx.latest().ok_or("no index level")?;
     let months = monthly_closes(&idx.level);
+
 
     let mut body = String::new();
     body.push_str(
@@ -165,6 +168,37 @@ pub fn render_history(
          question, and it moves at most one leg of at most 10% weight every fifth year.\n\n",
         format_fixed(crypto_now * SCALE / 100, 1)
     ));
+
+    if let (Some(first), Some(last)) = (path.first(), path.last()) {
+        body.push_str("## what a lease actually paid\n\n");
+        body.push_str(&format!(
+            "the machinery of §2 run over this decade: the basket priced in bitcoin, each \
+             annual step collared at +35%/−15%, the dual floor holding underneath. a lease \
+             signed on {} at one CX of rent invoiced ${} in its first year and ${} in its \
+             last — {}% a year, compounded.\n\n",
+            format_date(idx.base_day),
+            format_fixed(first.invoice, 2),
+            format_fixed(last.invoice, 2),
+            signed(annual_rate, 1)
+        ));
+        body.push_str("| year | basket in btc | rent owed | invoice |\n|---|---|---|---|\n");
+        for a in path {
+            body.push_str(&format!(
+                "| {} | {} | {} | ${} |\n",
+                format_date(a.day),
+                format_fixed(a.uncollared, 8),
+                format_fixed(a.rent_btc, 8),
+                format_thousands(a.invoice, 2)
+            ));
+        }
+        body.push_str(
+            "\nthe collar never engaged. bitcoin outran the basket every single year, so the \
+             sat leg of the floor bound every year instead, holding the rent at exactly its \
+             year-zero satoshi. read as the protocol reads it: whenever bitcoin outruns the \
+             basket the lease is a bitcoin-standard obligation, and this decade it was one \
+             throughout. the tenant paid in dollars whatever bitcoin did.\n\n",
+        );
+    }
 
     body.push_str("## today\n\n");
     body.push_str("| leg | fix (usd) | share |\n|---|---|---|\n");

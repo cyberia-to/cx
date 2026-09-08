@@ -13,7 +13,12 @@ fn group_class(g: Group) -> &'static str {
     }
 }
 
-pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<String, String> {
+pub fn render(
+    idx: &Index,
+    twaps: &[(&str, Daily)],
+    views: &[View],
+    indexation_default: &str,
+) -> Result<String, String> {
     let (day, level) = idx.latest().ok_or("no index level")?;
     let first = views.first().ok_or("no chart views")?;
 
@@ -368,7 +373,7 @@ pub fn render(idx: &Index, twaps: &[(&str, Daily)], views: &[View]) -> Result<St
         legs = legs_html,
         drift = drift_html,
         views = views_json,
-        calc = crate::calculator::html(),
+        calc = crate::calculator::html(indexation_default),
     );
 
     Ok(page)

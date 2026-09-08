@@ -369,3 +369,168 @@ mod tests {
         }
     }
 }
+
+/// the collar of §2: a year's rent may rise at most 35% and fall at most 15%
+/// against the year before, measured in the bitcoin numéraire.
+pub const COLLAR_UP_BP: i128 = 13_500;
+pub const COLLAR_DOWN_BP: i128 = 8_500;
+
+/// one anniversary of a lease written on the base date.
+#[derive(Debug, Clone, Copy)]
+pub struct Anniversary {
+    pub day: i64,
+    /// the basket priced in bitcoin, before the collar
+    pub uncollared: i128,
+    /// the rent actually owed, collared and floored
+    pub rent_btc: i128,
+    /// what that rent invoices in dollars
+    pub invoice: i128,
+}
+
+impl Index {
+    /// walk the lease machinery of §2 across the published decade: price the
+    /// basket in bitcoin, collar each annual step, hold the dual floor, and
+    /// convert back to dollars at the same fix.
+    ///
+    /// `btc` is the BTC/USD trailing average that serves as the ruler; `F` is
+    /// the year-zero rent in dollars, which for a one-dollar CX is [`BASE_LEVEL`].
+    pub fn collared_path(&self, btc: &Daily) -> Vec<Anniversary> {
+        let mut out: Vec<Anniversary> = Vec::new();
+        let mut year = 0i64;
+        let mut prev_rent: Option<i128> = None;
+        let mut s0 = 0i128;
+
+        loop {
+            let (y, m, d) = crate::num::civil_from_days(self.base_day);
+            let day = crate::num::days_from_civil(y + year, m, d);
+            if day > self.level.end() {
+                break;
+            }
+            let (Some(level), Some(x)) = (self.level.value_on(day), btc.value_on(day)) else {
+                break;
+            };
+            let Some(s) = fdiv(level, x) else { break };
+
+            let mut rent = match prev_rent {
+                None => {
+                    s0 = s;
+                    s
+                }
+                Some(prev) => {
+                    let hi = prev * COLLAR_UP_BP / 10_000;
+                    let lo = prev * COLLAR_DOWN_BP / 10_000;
+                    s.clamp(lo, hi)
+                }
+            };
+
+            // dual floor: never fewer satoshi than year zero, never fewer
+            // year-zero dollars
+            if let Some(fiat_leg) = fdiv(BASE_LEVEL, x) {
+                rent = rent.max(s0.max(fiat_leg));
+            }
+
+            out.push(Anniversary {
+                day,
+                uncollared: s,
+                rent_btc: rent,
+                invoice: fmul(rent, x),
+            });
+            prev_rent = Some(rent);
+            year += 1;
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod collar_tests {
+    use super::*;
+    use crate::num::{days_from_civil, parse_fixed};
+
+    fn fixed(s: &str) -> i128 {
+        parse_fixed(s).expect("valid number")
+    }
+
+    /// eleven anniversaries of daily values, starting at 2016-01-01.
+    fn daily(len: usize, f: impl Fn(usize) -> i128) -> Daily {
+        Daily {
+            start: days_from_civil(2016, 1, 1),
+            values: (0..len).map(f).collect(),
+        }
+    }
+
+    fn index_with(level: Daily) -> Index {
+        Index {
+            base_day: days_from_civil(2016, 1, 1),
+            quantities: Vec::new(),
+            level,
+        }
+    }
+
+    #[test]
+    fn a_runaway_basket_is_capped_at_the_collar() {
+        // the basket triples every year while the ruler stands still: the rent
+        // may still only climb 35% a year
+        let idx = index_with(daily(1500, |i| {
+            fixed("1") * (1 + (i as i128) / 365 * 2)
+        }));
+        let btc = daily(1500, |_| fixed("1000"));
+        let path = idx.collared_path(&btc);
+        assert!(path.len() >= 4);
+        for pair in path.windows(2) {
+            let ratio = pair[1].rent_btc * 10_000 / pair[0].rent_btc;
+            assert!(ratio <= COLLAR_UP_BP + 1, "rose {ratio} bp in one year");
+        }
+    }
+
+    #[test]
+    fn a_collapsing_basket_is_held_by_the_floor() {
+        // the basket falls away, but the sat floor holds the rent at year zero
+        let idx = index_with(daily(1500, |i| {
+            (fixed("1") - (i as i128) * fixed("0.0005")).max(fixed("0.001"))
+        }));
+        let btc = daily(1500, |_| fixed("1000"));
+        let path = idx.collared_path(&btc);
+        let first = path.first().expect("a first year").rent_btc;
+        for a in &path {
+            assert!(a.rent_btc >= first, "rent fell below the year-zero floor");
+        }
+    }
+
+    #[test]
+    fn a_flat_world_never_moves_the_invoice() {
+        let idx = index_with(daily(1500, |_| fixed("1")));
+        let btc = daily(1500, |_| fixed("1000"));
+        let path = idx.collared_path(&btc);
+        let first = path.first().expect("a first year").invoice;
+        for a in &path {
+            assert_eq!(a.invoice, first);
+        }
+    }
+
+    #[test]
+    fn the_path_lands_on_anniversaries() {
+        let idx = index_with(daily(1500, |_| fixed("1")));
+        let btc = daily(1500, |_| fixed("1000"));
+        let path = idx.collared_path(&btc);
+        assert_eq!(path[0].day, days_from_civil(2016, 1, 1));
+        assert_eq!(path[1].day, days_from_civil(2017, 1, 1));
+    }
+}
+
+impl Index {
+    /// the annual rate the collared path actually delivered, in fixed-point
+    /// percent. the geometric root is floating point — this is a figure for a
+    /// slider default and a sentence of copy, never an input to the index.
+    pub fn collared_annual_rate(&self, btc: &Daily) -> Option<i128> {
+        let path = self.collared_path(btc);
+        let (first, last) = (path.first()?.invoice, path.last()?.invoice);
+        if first <= 0 || path.len() < 2 {
+            return None;
+        }
+        let years = (path.len() - 1) as f64;
+        let ratio = last as f64 / first as f64;
+        let rate = ratio.powf(1.0 / years) - 1.0;
+        Some((rate * 100.0 * SCALE as f64) as i128)
+    }
+}

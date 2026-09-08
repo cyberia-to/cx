@@ -1,15 +1,19 @@
 //! the ground-lease pricer, ported from the graph.
 //!
 //! the model is unchanged from `cyber-valley/strategy/lease-pricer.md`
-//! (commit 5387526): leasehold economics = k × the land value; the premium takes p of
-//! it upfront, the remainder returns as indexed rent discounted at
+//! (commit 5387526): the premium takes p of the leasehold's economics
+//! upfront, the remainder returns as indexed rent discounted at
 //! `r = r_base + spread·(1−p)` — a smaller premium shifts value into the rent
 //! stream and raises the rate, pricing the tenant's default risk. review every
 //! N years resets rent to `max(indexed path, X% × market freehold)`, where X is
 //! the initial yield, so the lessor keeps the same position in the land forever.
 //!
-//! only the labels and the palette were touched: english for a published page,
-//! and the tokens of the site it now lives on.
+//! the model is reparameterised on the leasehold's own value rather than the
+//! freehold behind it: the product is a right of use, never a title, and the
+//! freehold cancels out of the review target anyway — `X% × land` with
+//! `X = rent₁/freehold` is just the first year's rent carried forward at g.
+//! labels are english and the palette is the site's; the rent path is
+//! arithmetically what it was.
 
 /// the whole block. `indexation_default` seeds the indexation slider with what
 /// the index actually delivered, clamped into the collar band it now spans.
@@ -46,23 +50,22 @@ const TEMPLATE: &str = r##"<div id="lcalc"></div>
 <script>
 (function(){
 const root=document.getElementById('lcalc');
-const P={FH:100000,T:30,k:87,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
+const P={L:100000,T:30,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
 const DEFS=[
  ['deal','Deal'],
- ['FH','Land value today',20000,2000000,10000,'$','The valuation basis — what the parcel is worth outright. It is not what is sold: the product is the leasehold on it, worth k of this over the term'],
+ ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
  ['T','Term',5,99,1,' yr',''],
- ['k','Relativity k',50,99,1,'%','Share of the land value the leasehold carries over its term: 30y is about 87%, 50y about 95%'],
  ['p','Premium (share of economics)',0,100,5,'%','A smaller premium leaves more cash with the business and shifts value into the rent'],
  ['rates','Rates'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%',''],
  ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','Default risk rises as the premium shrinks'],
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
  ['grow','Protection from land growth'],
- ['g','Land growth g',0,20,0.5,'%','Bali has historically outrun CPI'],
- ['N','Review every',1,15,1,' yr','Rent = max(indexed path, X% of the land value at the review); X is the starting yield, so the lessor keeps the same position in the land']];
+ ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Bali has historically outrun CPI'],
+ ['N','Review every',1,15,1,' yr','Rent = max(indexed path, the first year carried forward at g); the lessor keeps the same position in the parcel however far the index falls behind']];
 let html='';
 for(const d of DEFS){
  if(d.length===2){html+='<h4>'+d[1]+'</h4>';continue}
@@ -74,7 +77,7 @@ for(const d of DEFS){
 root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=out><div class=stats id=st1></div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
-+'<div class=legend><span><i style="background:var(--mut)"></i>X% of land (target)</span>'
++'<div class=legend><span><i style="background:var(--mut)"></i>rent tracking the parcel (target)</span>'
 +'<span><i style="background:var(--red)"></i>index only</span>'
 +'<span><i style="background:var(--amb)"></i>index + review</span></div></div>'
 +'<div class=panel><h4>What the review buys</h4><div class=stats id=st2></div>'
@@ -84,19 +87,21 @@ root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 
 function calc(){
  const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100, g=P.g/100;
- const totalPV=P.k/100*P.FH, premium=pf*totalPV, remainder=totalPV-premium;
+ const totalPV=P.L, premium=pf*totalPV, remainder=totalPV-premium;
  let A=0; for(let t=1;t<=P.T;t++) A+=Math.pow(1+cpi,t-1)/Math.pow(1+rAdj,t);
- const rent1=remainder/A, yld=rent1/P.FH*100, X=yld;
+ const rent1=remainder/A, yld=rent1/P.L*100;
  const rows=[]; let bi=rent1,br=rent1,pvI=0,pvR=0,nomI=0,nomR=0;
  for(let t=1;t<=P.T;t++){
   if(t>1){bi*=1+cpi;br*=1+cpi}
-  const land=P.FH*Math.pow(1+g,t-1), target=X/100*land;
+  // the review target keeps the lessor's share of the parcel: the first
+  // year's rent carried forward at the growth rate
+  const target=rent1*Math.pow(1+g,t-1);
   if(t>1&&(t-1)%P.N===0) br=Math.max(br,target);
   rows.push([t,bi,br,target]);
   pvI+=bi/Math.pow(1+rAdj,t); pvR+=br/Math.pow(1+rAdj,t); nomI+=bi; nomR+=br;
  }
  return{rAdj:rAdj*100,premium,totalPV,rent1,yld,rows,pvI,pvR,nomI,nomR,
-  landEnd:P.FH*Math.pow(1+g,P.T-1),takeI:premium+pvI,takeR:premium+pvR};
+  leaseEnd:P.L*Math.pow(1+g,P.T-1),takeI:premium+pvI,takeR:premium+pvR};
 }
 function stat(l,v,s,c){return '<div class=stat><div class=l>'+l+'</div><div class=v'+(c?' style=color:'+c:'')+'>'+v+'</div>'+(s?'<div class=s>'+s+'</div>':'')+'</div>'}
 function chart(rows){
@@ -125,7 +130,7 @@ function render(){
  document.getElementById('st2').innerHTML=
   stat('PV gained from review','+'+fmt(gain),'+'+pct(gain/c.takeI*100)+' on the deal','var(--amb)')
   +stat('Nominal rent over the term',fmt(c.nomR),'vs '+fmt(c.nomI)+' without review')
-  +stat('Land at the end',fmt(c.landEnd),'growth '+P.g+'%/yr over '+P.T+' years');
+  +stat('Lease at the end',fmt(c.leaseEnd),'growth '+P.g+'%/yr over '+P.T+' years');
  document.getElementById('lchart').innerHTML=chart(c.rows);
 }
 for(const d of DEFS){if(d.length===2)continue;const id=d[0];
@@ -142,7 +147,7 @@ mod tests {
     fn carries_the_model_and_its_controls() {
         let h = html("4");
         // every input of the original model survives the port
-        for id in ["FH", "T", "k", "p", "rBase", "spread", "cpi", "g", "N"] {
+        for id in ["L", "T", "p", "rBase", "spread", "cpi", "g", "N"] {
             assert!(h.contains(&format!("['{id}'")), "missing control {id}");
         }
         // the pricing identities, unchanged
@@ -184,12 +189,14 @@ mod vocabulary_tests {
     use super::*;
 
     #[test]
-    fn the_land_value_is_a_basis_not_a_product() {
+    fn the_pricer_never_speaks_of_freehold() {
         let h = html("35");
-        // the page sells a leasehold; the freehold figure is only the basis it
-        // is priced from, and the interface must not suggest otherwise
-        assert!(h.contains("'Land value today'"));
-        assert!(!h.contains("Freehold today"));
-        assert!(h.contains("the product is the leasehold on it"));
+        // a right of use is the product; quoting a freehold here would price a
+        // thing that is not for sale
+        assert!(h.contains("'Leasehold value today'"));
+        assert!(!h.to_lowercase().contains("freehold"));
+        assert!(!h.contains("Relativity"));
+        // the review target is the reparameterised identity
+        assert!(h.contains("target=rent1*Math.pow(1+g,t-1)"));
     }
 }

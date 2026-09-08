@@ -280,10 +280,10 @@ pub fn render(
   <section>
     <h2>Pricer</h2>
     <p class="note">What the index is for. The product is a leasehold — the right to use a
-    parcel for a term, never its title. Its economics are a share of what the land is worth
-    outright: part taken as a premium at signing, the rest returned as rent, indexed for the
-    life of the contract. Move the sliders to see what that split costs, and what a review
-    clause buys when the land outruns the indexation.</p>
+    parcel for a term, never its title. Part of its value is taken as a premium at signing,
+    the rest returned as rent, indexed for the life of the contract. Move the sliders to see
+    what that split costs, and what a review clause buys when the parcel appreciates faster
+    than the indexation.</p>
     {calc}
   </section>
 

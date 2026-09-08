@@ -55,16 +55,16 @@ const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
 const DEFS=[
- ['deal','Deal'],
+ ['choose','What you choose'],
  ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
- ['T','Term',5,99,1,' yr',''],
- ['p','Premium (share of economics)',0,100,5,'%','A smaller premium leaves more cash with the business and shifts value into the rent'],
- ['rates','Rates'],
- ['rBase','Base rate (at 100% premium)',5,18,0.5,'%',''],
- ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','Default risk rises as the premium shrinks'],
+ ['T','Term',5,99,1,' yr','Longer term, more value in the lease and a longer rent stream'],
+ ['p','Premium (share of economics)',0,100,5,'%','The one dial that is genuinely yours: pay more at signing and owe less rent, or keep the cash and carry the rent. 100% is the upfront instrument, 0% is pure rent'],
+ ['world','What the world does'],
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
- ['grow','Protection from land growth'],
- ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Bali has historically outrun CPI'],
+ ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Nobody sets this; Bali has historically outrun CPI'],
+ ['estate','How the estate prices it'],
+ ['rBase','Base rate (at 100% premium)',5,18,0.5,'%','The estate discount rate. Not a tenant dial — shown so the price can be checked rather than trusted'],
+ ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','What the estate charges for carrying default risk as the premium shrinks'],
  ['N','Review every',1,15,1,' yr','Rent = max(indexed path, the first year carried forward at g); the lessor keeps the same position in the parcel however far the index falls behind']];
 let html='';
 for(const d of DEFS){
@@ -198,5 +198,23 @@ mod vocabulary_tests {
         assert!(!h.contains("Relativity"));
         // the review target is the reparameterised identity
         assert!(h.contains("target=rent1*Math.pow(1+g,t-1)"));
+    }
+}
+
+#[cfg(test)]
+mod audience_tests {
+    use super::*;
+
+    #[test]
+    fn the_dials_are_grouped_by_who_holds_them() {
+        let h = html("35");
+        // a reader must be able to tell their own choices from the estate's
+        // underwriting; mixing them prices a deal the tenant cannot steer
+        let choose = h.find("What you choose").expect("tenant group");
+        let world = h.find("What the world does").expect("world group");
+        let estate = h.find("How the estate prices it").expect("estate group");
+        assert!(choose < world && world < estate, "groups out of order");
+        // the underwriting dials say plainly that they are not the tenant's
+        assert!(h.contains("Not a tenant dial"));
     }
 }

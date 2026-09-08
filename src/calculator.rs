@@ -50,7 +50,7 @@ const TEMPLATE: &str = r##"<div id="lcalc"></div>
 <script>
 (function(){
 const root=document.getElementById('lcalc');
-const P={L:100000,T:30,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
+const P={L:100000,T:25,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
@@ -204,6 +204,11 @@ mod vocabulary_tests {
 #[cfg(test)]
 mod audience_tests {
     use super::*;
+
+    #[test]
+    fn the_term_opens_at_the_standard_lease() {
+        assert!(html("35").contains("T:25"), "term should default to 25 years");
+    }
 
     #[test]
     fn the_dials_are_grouped_by_who_holds_them() {

@@ -61,7 +61,7 @@ const pct=(v,d=1)=>v.toFixed(d)+'%';
 // estate's underwriting, shown as the fixed figures they are
 const LIVE=['cpi'];
 const DEFS=[
- ['deal','The deal'],
+ ['deal','Your lease'],
  ['L','Leasehold value today',20000,2000000,10000,'$','What the right to use the parcel for the term is worth — the product itself, priced directly'],
  ['T','Term',5,99,1,' yr','The standard term'],
  ['p','Premium (share of economics)',0,100,5,'%','How much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
@@ -234,7 +234,7 @@ mod audience_tests {
     fn the_dials_are_grouped_by_who_holds_them() {
         let h = html("35");
         // a reader must be able to tell the deal from the estate's underwriting
-        let choose = h.find("The deal").expect("deal group");
+        let choose = h.find("Your lease").expect("client group");
         let world = h.find("What the world does").expect("world group");
         let estate = h.find("How the estate prices it").expect("estate group");
         assert!(choose < world && world < estate, "groups out of order");

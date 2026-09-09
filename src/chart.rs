@@ -22,8 +22,11 @@ const LOG_ABOVE: i128 = 4;
 pub struct View {
     pub key: &'static str,
     pub label: &'static str,
-    /// inner SVG: grid, ticks, path, end marker, hover group
+    /// inner SVG: grid, path, end marker, hover group
     pub svg: String,
+    /// axis labels as HTML, positioned over the plot in percentages — text
+    /// inside the stretched viewBox would be squashed with it
+    pub labels: String,
     /// `[[x, y, "level", "YYYY-MM-DD"], …]` for the hover layer
     pub points_json: String,
     pub logarithmic: bool,
@@ -170,6 +173,12 @@ fn x_labels(pts: &[(i64, i128)], days: Option<i64>) -> Vec<(usize, String)> {
     out
 }
 
+/// a viewBox coordinate as a percentage string of the given extent.
+fn pct(v: i64, extent: i64) -> String {
+    let hundredths = v * 10_000 / extent;
+    format!("{}.{:02}", hundredths / 100, (hundredths % 100).abs())
+}
+
 fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Option<i64>) -> View {
     let pts = sample(level, days);
     let n = pts.len().max(2) as i64;
@@ -213,6 +222,7 @@ fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Opti
     };
 
     let mut svg = String::new();
+    let mut labels = String::new();
     for tick in &ticks {
         let y = y_of(*tick);
         if y < PAD_T - 2 || y > PAD_T + plot_h + 2 {
@@ -222,19 +232,17 @@ fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Opti
             "<line class=\"grid\" x1=\"{PAD_L}\" y1=\"{y}\" x2=\"{}\" y2=\"{y}\"/>",
             PAD_L + plot_w
         ));
-        svg.push_str(&format!(
-            "<text class=\"tick\" x=\"{}\" y=\"{}\">{}</text>",
-            PAD_L + plot_w + 8,
-            y + 4,
+        labels.push_str(&format!(
+            "<span class=\"y\" style=\"top:{}%\">{}</span>",
+            pct(y, H),
             format_thousands(*tick, places)
         ));
     }
 
     for (i, text) in x_labels(&pts, days) {
-        svg.push_str(&format!(
-            "<text class=\"tick\" x=\"{}\" y=\"{}\" text-anchor=\"middle\">{text}</text>",
-            x_of(i as i64),
-            H - 8
+        labels.push_str(&format!(
+            "<span class=\"x\" style=\"left:{}%\">{text}</span>",
+            pct(x_of(i as i64), W)
         ));
     }
 
@@ -281,6 +289,7 @@ fn render_view(level: &Daily, key: &'static str, label: &'static str, days: Opti
         key,
         label,
         svg,
+        labels,
         points_json,
         logarithmic,
     }

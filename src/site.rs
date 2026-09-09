@@ -47,9 +47,10 @@ pub fn render(
                 out.push(',');
             }
             out.push_str(&format!(
-                "\"{}\":{{\"svg\":\"{}\",\"pts\":{},\"log\":{}}}",
+                "\"{}\":{{\"svg\":\"{}\",\"labels\":\"{}\",\"pts\":{},\"log\":{}}}",
                 v.key,
                 v.svg.replace('\\', "\\\\").replace('"', "\\\""),
+                v.labels.replace('\\', "\\\\").replace('"', "\\\""),
                 v.points_json,
                 v.logarithmic
             ));
@@ -165,10 +166,15 @@ pub fn render(
   .tabs button:hover{{color:var(--ink)}}
   .tabs button.on{{color:var(--bg);background:var(--green);border-color:var(--green)}}
 
-  .chart{{width:100%;height:200px;overflow:visible}}
+  .chartwrap{{position:relative;padding-bottom:24px}}
+  .chart{{width:100%;height:200px;display:block;overflow:visible}}
+  .labels{{position:absolute;left:0;right:0;top:0;height:200px;pointer-events:none}}
+  .labels span{{position:absolute;font-size:13px;color:var(--mute);white-space:nowrap;
+    font-variant-numeric:tabular-nums}}
+  .labels .y{{right:0;transform:translateY(-50%)}}
+  .labels .x{{top:206px;transform:translateX(-50%)}}
   .chart .line{{fill:none;stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}}
   .chart .grid{{stroke:var(--line);stroke-width:1}}
-  .chart .tick{{fill:var(--mute);font-size:20px;font-family:'Play',sans-serif}}
   .chart .end{{fill:var(--green);stroke:var(--bg);stroke-width:2}}
   .chart .cross{{stroke:var(--mute);stroke-width:1}}
   .chart .dot{{fill:var(--green);stroke:var(--bg);stroke-width:2}}
@@ -229,8 +235,11 @@ pub fn render(
   </div>
 
   <section>
-    <svg class="chart" id="chart" viewBox="0 0 1000 320" preserveAspectRatio="none"
-         role="img" aria-label="CX index level">{chart_svg}</svg>
+    <div class="chartwrap">
+      <svg class="chart" id="chart" viewBox="0 0 1000 320" preserveAspectRatio="none"
+           role="img" aria-label="CX index level">{chart_svg}</svg>
+      <div class="labels" id="labels">{chart_labels}</div>
+    </div>
     <div class="readout" id="readout">{readout}</div>
   </section>
 
@@ -311,6 +320,7 @@ pub fn render(
 (() => {{
   const views = {views};
   const svg = document.getElementById('chart');
+  const labels = document.getElementById('labels');
   const readout = document.getElementById('readout');
   const rest = readout.textContent;
   let pts = [];
@@ -319,6 +329,7 @@ pub fn render(
     const view = views[key];
     if (!view) return;
     svg.innerHTML = view.svg;
+    labels.innerHTML = view.labels;
     pts = view.pts;
   }};
 
@@ -370,6 +381,7 @@ pub fn render(
         tabs = tabs_html,
         readout = readout,
         chart_svg = views[0].svg,
+        chart_labels = views[0].labels,
         bar = bar_html,
         chips = chips_html,
         legs = legs_html,

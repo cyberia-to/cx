@@ -168,7 +168,7 @@ pub fn render(
   .chart{{width:100%;height:200px;overflow:visible}}
   .chart .line{{fill:none;stroke:var(--green);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}}
   .chart .grid{{stroke:var(--line);stroke-width:1}}
-  .chart .tick{{fill:var(--mute);font-size:13px;font-family:'Play',sans-serif}}
+  .chart .tick{{fill:var(--mute);font-size:20px;font-family:'Play',sans-serif}}
   .chart .end{{fill:var(--green);stroke:var(--bg);stroke-width:2}}
   .chart .cross{{stroke:var(--mute);stroke-width:1}}
   .chart .dot{{fill:var(--green);stroke:var(--bg);stroke-width:2}}

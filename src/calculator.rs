@@ -133,7 +133,7 @@ function render(){
  document.getElementById('st1').innerHTML=
   stat('Premium (first payment)',fmt(c.premium),P.p+'% of '+fmt(c.totalPV)+' of leasehold value','var(--jade)')
   +stat('Rent, year 1',fmt(c.rent1)+'/yr','yield '+pct(c.yld,2)+' · rate '+pct(c.rAdj))
-  +stat('PV of the deal',fmt(c.takeR),'vs '+fmt(c.takeI)+' without review');
+  +stat('PV (present value) of the deal',fmt(c.takeR),'vs '+fmt(c.takeI)+' without review');
  document.getElementById('st2').innerHTML=
   stat('PV gained from review','+'+fmt(gain),'+'+pct(gain/c.takeI*100)+' on the deal','var(--amb)')
   +stat('Nominal rent over the term',fmt(c.nomR),'vs '+fmt(c.nomI)+' without review')

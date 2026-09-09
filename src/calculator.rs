@@ -86,18 +86,14 @@ root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
 +'<div class=legend><span><i style="background:var(--mut)"></i>rent tracking the parcel (target)</span>'
 +'<span><i style="background:var(--red)"></i>index only</span>'
-+'<span><i style="background:var(--amb)"></i>index + review</span></div></div>'
-+'<div class=panel><h4>What the review buys</h4><div class=stats id=st2></div>'
-+'<p class=note>The red line is rent that is indexed but whose share of the asset melts away when g &gt; the index. '
-+'The amber line is pulled back at each review to X% of current land value and indexed from the new base. '
-+'When g equals the index the two coincide: the review costs the tenant nothing and is pure insurance.</p></div></div></div>';
++'<span><i style="background:var(--amb)"></i>index + review</span></div></div></div></div>';
 
 function calc(){
  const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100, g=P.g/100;
  const totalPV=P.L, premium=pf*totalPV, remainder=totalPV-premium;
  let A=0; for(let t=1;t<=P.T;t++) A+=Math.pow(1+cpi,t-1)/Math.pow(1+rAdj,t);
  const rent1=remainder/A, yld=rent1/P.L*100;
- const rows=[]; let bi=rent1,br=rent1,pvI=0,pvR=0,nomI=0,nomR=0;
+ const rows=[]; let bi=rent1,br=rent1;
  for(let t=1;t<=P.T;t++){
   if(t>1){bi*=1+cpi;br*=1+cpi}
   // the review target keeps the lessor's share of the parcel: the first
@@ -105,10 +101,8 @@ function calc(){
   const target=rent1*Math.pow(1+g,t-1);
   if(t>1&&(t-1)%P.N===0) br=Math.max(br,target);
   rows.push([t,bi,br,target]);
-  pvI+=bi/Math.pow(1+rAdj,t); pvR+=br/Math.pow(1+rAdj,t); nomI+=bi; nomR+=br;
  }
- return{rAdj:rAdj*100,premium,totalPV,rent1,yld,rows,pvI,pvR,nomI,nomR,
-  leaseEnd:P.L*Math.pow(1+g,P.T-1),takeI:premium+pvI,takeR:premium+pvR};
+ return{rAdj:rAdj*100,premium,totalPV,rent1,yld,rows};
 }
 function stat(l,v,s,c){return '<div class=stat><div class=l>'+l+'</div><div class=v'+(c?' style=color:'+c:'')+'>'+v+'</div>'+(s?'<div class=s>'+s+'</div>':'')+'</div>'}
 function chart(rows){
@@ -129,15 +123,10 @@ function chart(rows){
 function render(){
  for(const d of DEFS){if(d.length===2)continue;const id=d[0];
   document.getElementById('v_'+id).textContent=(d[5]==='$'?full(P[id]):P[id]+d[5]);}
- const c=calc(), gain=c.takeR-c.takeI;
+ const c=calc();
  document.getElementById('st1').innerHTML=
   stat('Premium (first payment)',fmt(c.premium),P.p+'% of '+fmt(c.totalPV)+' of leasehold value','var(--jade)')
-  +stat('Rent, year 1',fmt(c.rent1)+'/yr','yield '+pct(c.yld,2)+' · rate '+pct(c.rAdj))
-  +stat('PV (present value) of the deal',fmt(c.takeR),'vs '+fmt(c.takeI)+' without review');
- document.getElementById('st2').innerHTML=
-  stat('PV gained from review','+'+fmt(gain),'+'+pct(gain/c.takeI*100)+' on the deal','var(--amb)')
-  +stat('Nominal rent over the term',fmt(c.nomR),'vs '+fmt(c.nomI)+' without review')
-  +stat('Lease at the end',fmt(c.leaseEnd),'growth '+P.g+'%/yr over '+P.T+' years');
+  +stat('Rent, year 1',fmt(c.rent1)+'/yr','yield '+pct(c.yld,2));
  document.getElementById('lchart').innerHTML=chart(c.rows);
 }
 for(const id of LIVE){
@@ -239,5 +228,31 @@ mod audience_tests {
         assert!(choose < world && world < estate, "groups out of order");
         // the underwriting dials say plainly that they are not the tenant's
         assert!(h.contains("Not a tenant dial"));
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn the_estate_underwriting_stays_off_the_client_page() {
+        let h = html("35");
+        // what the estate earns from the review is its own business; on a
+        // client page it reads as a bill, and the nominal sums over a quarter
+        // century read as a price they are not
+        for gone in [
+            "What the review buys",
+            "PV gained from review",
+            "Nominal rent over the term",
+            "Lease at the end",
+            "PV (present value) of the deal",
+        ] {
+            assert!(!h.contains(gone), "{gone} is still on the page");
+        }
+        // premium, rent and the path remain
+        assert!(h.contains("Premium (first payment)"));
+        assert!(h.contains("Rent, year 1"));
+        assert!(h.contains("Rent path, $/yr"));
     }
 }

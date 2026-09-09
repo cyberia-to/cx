@@ -86,7 +86,11 @@ root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
 +'<div class=legend><span><i style="background:var(--mut)"></i>rent tracking the parcel (target)</span>'
 +'<span><i style="background:var(--red)"></i>index only</span>'
-+'<span><i style="background:var(--amb)"></i>index + review</span></div></div></div></div>';
++'<span><i style="background:var(--amb)"></i>index + review</span></div>'
++'<p class=note>Red is rent carried by the indexation alone. Amber adds the review clause: '
++'at each review the rent is lifted to the grey line — the rent of the first year grown with the '
++'parcel — so it keeps pace when the indexation falls behind. When the two grow alike the '
++'three coincide and the review changes nothing.</p></div></div></div>';
 
 function calc(){
  const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100, g=P.g/100;
@@ -254,5 +258,10 @@ mod scope_tests {
         assert!(h.contains("Premium (first payment)"));
         assert!(h.contains("Rent, year 1"));
         assert!(h.contains("Rent path, $/yr"));
+        // the three lines are legible only if something says what they are
+        assert!(h.contains("Red is rent carried by the indexation alone"));
+        assert!(h.contains("Amber adds the review clause"));
+        // an unescaped apostrophe here once tore the script in half
+        assert!(!h.contains("\\'"), "double-escaped quote in the emitted script");
     }
 }

@@ -374,7 +374,7 @@ pub fn render(
   }});
 }})();
 </script>
-<script src="https://cyberia.to/player.js" defer></script>
+<script src="https://cyberia.to/player.js" async></script>
 </body>
 </html>
 "##,

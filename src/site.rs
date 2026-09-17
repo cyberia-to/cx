@@ -225,6 +225,7 @@ pub fn render(
     </svg>
     Cyberia
   </div>
+  <div class="player" data-cyberia-player style="display:flex;margin:16px 0 0"></div>
 
   <h1>CX<span>century index</span></h1>
 
@@ -373,6 +374,7 @@ pub fn render(
   }});
 }})();
 </script>
+<script src="https://cyberia.to/player.js" defer></script>
 </body>
 </html>
 "##,

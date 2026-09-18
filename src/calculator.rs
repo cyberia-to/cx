@@ -16,9 +16,12 @@
 //! arithmetically what it was.
 
 /// the whole block. `indexation_default` seeds the indexation slider with what
-/// the index actually delivered, clamped into the collar band it now spans.
-pub fn html(indexation_default: &str) -> String {
-    TEMPLATE.replace("__INDEXATION__", indexation_default)
+/// a lease of the base date actually paid per year, clamped into the collar
+/// band the slider spans; `base_date` names that date in the hint.
+pub fn html(indexation_default: &str, base_date: &str) -> String {
+    TEMPLATE
+        .replace("__INDEXATION__", indexation_default)
+        .replace("__BASE__", base_date)
 }
 
 const TEMPLATE: &str = r##"<div id="lcalc"></div>
@@ -66,7 +69,7 @@ const DEFS=[
  ['T','Term',5,99,1,' yr','How many years the lease runs'],
  ['p','Premium (share of economics)',0,100,5,'%','Yours to choose: how much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
  ['world','What the world does'],
- ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what the index delivered over the published decade, which ran hotter than the collar allows'],
+ ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what a lease signed on __BASE__ actually paid per year, collar and floor applied'],
  ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Nobody sets this; Bali has historically outrun CPI'],
  ['estate','How the estate prices it'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%','The estate discount rate. Not a tenant dial — shown so the price can be checked rather than trusted'],
@@ -145,7 +148,7 @@ mod tests {
 
     #[test]
     fn carries_the_model_and_its_controls() {
-        let h = html("4");
+        let h = html("4", "2022-01-07");
         // every input of the original model survives the port
         for id in ["L", "T", "p", "rBase", "spread", "cpi", "g", "N"] {
             assert!(h.contains(&format!("['{id}'")), "missing control {id}");
@@ -159,13 +162,13 @@ mod tests {
     #[test]
     fn is_published_in_english() {
         // the graph copy was russian; a published page is not
-        assert!(!html("4").chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)));
+        assert!(!html("4", "2022-01-07").chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)));
     }
 
     #[test]
     fn scopes_its_own_ids() {
         // the page already owns #chart; the pricer must not collide with it
-        let h = html("4");
+        let h = html("4", "2022-01-07");
         assert!(h.contains("lchart"));
         assert!(!h.contains("getElementById('chart')"));
     }
@@ -177,9 +180,11 @@ mod default_tests {
 
     #[test]
     fn the_indexation_default_is_injected_and_the_band_is_the_collar() {
-        let h = html("35");
+        let h = html("35", "2022-01-07");
         assert!(h.contains("cpi:35"), "default not seeded");
         assert!(!h.contains("__INDEXATION__"), "placeholder survived");
+        assert!(!h.contains("__BASE__"), "base placeholder survived");
+        assert!(h.contains("signed on 2022-01-07"), "base date not in the hint");
         assert!(h.contains("'Indexation',-15,35,0.5"), "slider does not span the collar");
     }
 }
@@ -190,7 +195,7 @@ mod vocabulary_tests {
 
     #[test]
     fn the_pricer_never_speaks_of_freehold() {
-        let h = html("35");
+        let h = html("35", "2022-01-07");
         // a right of use is the product; quoting a freehold here would price a
         // thing that is not for sale
         assert!(h.contains("'Leasehold value today'"));
@@ -207,12 +212,12 @@ mod audience_tests {
 
     #[test]
     fn the_term_opens_at_the_standard_lease() {
-        assert!(html("35").contains("T:25"), "term should default to 25 years");
+        assert!(html("35", "2022-01-07").contains("T:25"), "term should default to 25 years");
     }
 
     #[test]
     fn the_client_moves_their_own_terms_and_the_scenario() {
-        let h = html("35");
+        let h = html("35", "2022-01-07");
         // price, term and premium are the client's to set; the indexation is
         // the scenario. the estate's underwriting is not negotiable here and
         // must not look like a control.
@@ -224,7 +229,7 @@ mod audience_tests {
 
     #[test]
     fn the_dials_are_grouped_by_who_holds_them() {
-        let h = html("35");
+        let h = html("35", "2022-01-07");
         // a reader must be able to tell the deal from the estate's underwriting
         let choose = h.find("Your lease").expect("client group");
         let world = h.find("What the world does").expect("world group");
@@ -241,7 +246,7 @@ mod scope_tests {
 
     #[test]
     fn the_estate_underwriting_stays_off_the_client_page() {
-        let h = html("35");
+        let h = html("35", "2022-01-07");
         // what the estate earns from the review is its own business; on a
         // client page it reads as a bill, and the nominal sums over a quarter
         // century read as a price they are not

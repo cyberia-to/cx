@@ -375,6 +375,33 @@ mod tests {
 pub const COLLAR_UP_BP: i128 = 13_500;
 pub const COLLAR_DOWN_BP: i128 = 8_500;
 
+/// what decided a year's rent under §2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Binding {
+    /// the basket's own price passed through
+    Basket,
+    /// the collar capped the rise at +35%
+    CollarUp,
+    /// the collar held the fall at −15%
+    CollarDown,
+    /// the satoshi floor: no fewer sats than year zero
+    SatFloor,
+    /// the dollar floor: no fewer year-zero dollars
+    FiatFloor,
+}
+
+impl Binding {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Binding::Basket => "basket",
+            Binding::CollarUp => "collar, rise capped",
+            Binding::CollarDown => "collar, fall held",
+            Binding::SatFloor => "satoshi floor",
+            Binding::FiatFloor => "dollar floor",
+        }
+    }
+}
+
 /// one anniversary of a lease written on the base date.
 #[derive(Debug, Clone, Copy)]
 pub struct Anniversary {
@@ -385,12 +412,15 @@ pub struct Anniversary {
     pub rent_btc: i128,
     /// what that rent invoices in dollars
     pub invoice: i128,
+    /// which rule of §2 set the rent this year
+    pub binding: Binding,
 }
 
 impl Index {
-    /// walk the lease machinery of §2 across the published decade: price the
-    /// basket in bitcoin, collar each annual step, hold the dual floor, and
-    /// convert back to dollars at the same fix.
+    /// walk the lease machinery of §2 from the base date: price the basket in
+    /// bitcoin, collar each annual step, hold the dual floor, and convert back
+    /// to dollars at the same fix. year zero is the definition R(0) = S₀ and
+    /// takes no floor.
     ///
     /// `btc` is the BTC/USD trailing average that serves as the ruler; `F` is
     /// the year-zero rent in dollars, which for a one-dollar CX is [`BASE_LEVEL`].
@@ -411,22 +441,39 @@ impl Index {
             };
             let Some(s) = fdiv(level, x) else { break };
 
-            let mut rent = match prev_rent {
+            let (mut rent, mut binding) = match prev_rent {
                 None => {
                     s0 = s;
-                    s
+                    (s, Binding::Basket)
                 }
                 Some(prev) => {
                     let hi = prev * COLLAR_UP_BP / 10_000;
                     let lo = prev * COLLAR_DOWN_BP / 10_000;
-                    s.clamp(lo, hi)
+                    if s > hi {
+                        (hi, Binding::CollarUp)
+                    } else if s < lo {
+                        (lo, Binding::CollarDown)
+                    } else {
+                        (s, Binding::Basket)
+                    }
                 }
             };
 
             // dual floor: never fewer satoshi than year zero, never fewer
-            // year-zero dollars
-            if let Some(fiat_leg) = fdiv(BASE_LEVEL, x) {
-                rent = rent.max(s0.max(fiat_leg));
+            // year-zero dollars. the two legs are compared as sats at this
+            // year's fix, and whichever is higher is the floor that binds.
+            if prev_rent.is_some() {
+                if let Some(fiat_leg) = fdiv(BASE_LEVEL, x) {
+                    let floor = s0.max(fiat_leg);
+                    if floor > rent {
+                        rent = floor;
+                        binding = if fiat_leg > s0 {
+                            Binding::FiatFloor
+                        } else {
+                            Binding::SatFloor
+                        };
+                    }
+                }
             }
 
             out.push(Anniversary {
@@ -434,6 +481,7 @@ impl Index {
                 uncollared: s,
                 rent_btc: rent,
                 invoice: fmul(rent, x),
+                binding,
             });
             prev_rent = Some(rent);
             year += 1;
@@ -481,6 +529,8 @@ mod collar_tests {
             let ratio = pair[1].rent_btc * 10_000 / pair[0].rent_btc;
             assert!(ratio <= COLLAR_UP_BP + 1, "rose {ratio} bp in one year");
         }
+        assert_eq!(path[0].binding, Binding::Basket);
+        assert!(path[1..].iter().all(|a| a.binding == Binding::CollarUp));
     }
 
     #[test]
@@ -495,6 +545,8 @@ mod collar_tests {
         for a in &path {
             assert!(a.rent_btc >= first, "rent fell below the year-zero floor");
         }
+        // a flat ruler makes both floor legs equal, and the sat leg is named
+        assert!(path[1..].iter().all(|a| a.binding == Binding::SatFloor));
     }
 
     #[test]
@@ -505,6 +557,7 @@ mod collar_tests {
         let first = path.first().expect("a first year").invoice;
         for a in &path {
             assert_eq!(a.invoice, first);
+            assert_eq!(a.binding, Binding::Basket);
         }
     }
 

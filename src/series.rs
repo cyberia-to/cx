@@ -116,10 +116,10 @@ impl Daily {
     /// the "annual TWAP" of §3.
     ///
     /// a leg whose market is younger than the window averages over what it has,
-    /// once at least `min_days` of fixes exist — ETH had a four-month-old USD
-    /// market at the base date of the published decade, and a shorter honest
-    /// window beats a synthetic cross invented to fill the gap. output starts
-    /// at the first day carrying `min_days` of history.
+    /// once at least `min_days` of fixes exist — a shorter honest window beats
+    /// a synthetic cross invented to fill the gap. (with a 2016 base this was
+    /// ETH's four-month-old USD market; from the 2022 base every leg carries a
+    /// full window.) output starts at the first day carrying `min_days`.
     pub fn trailing_mean_min(&self, window: usize, min_days: usize) -> Option<Daily> {
         if window == 0 || min_days == 0 || self.values.len() < min_days {
             return None;

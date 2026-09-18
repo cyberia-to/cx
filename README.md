@@ -46,10 +46,14 @@ this is a reconstruction from free public data — evidence and orientation, nev
 the contractual fix. a signed lease names its own sources with fallbacks, per the
 cessation waterfall in the protocol.
 
-two honest limits, both stated on the published pages: copper and uranium print
-monthly and carry forward between prints, and ETH had a four-month-old USD market
-at the base date, so its average there covers 113 days rather than 365 — a leg
-younger than the window averages over what it has, once 90 days exist.
+the base date is fixed: 2022-01-07, the day one CX cost one dollar. a base that
+slid with the calendar would recompute the quantities every morning while the
+page promised they never change. every leg carries a full 365-day window behind
+that date; the rule that a younger leg averages over what it has, once 90 days
+exist, stays as a safeguard.
+
+one honest limit, stated on the published pages: copper and uranium print
+monthly and carry forward between prints.
 
 ## flags
 

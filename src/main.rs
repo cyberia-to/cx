@@ -18,11 +18,13 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use fetch::Fetcher;
-use num::{days_from_civil, format_date, parse_date, civil_from_days, SCALE};
+use num::{days_from_civil, format_date, parse_date, SCALE};
 use series::{all_positive, max_daily_ratio, Daily, Series};
 
-/// how far back the published history reaches.
-const HISTORY_YEARS: i64 = 10;
+/// the base date: one CX is what the basket cost on this day. fixed, so the
+/// quantities really never change — a base that slides with the calendar would
+/// recompute them every morning while the page promised they stood still.
+const BASE: (i64, i64, i64) = (2022, 1, 7);
 
 /// a glitch guard: no leg in this basket moves 5x in a day. copper and uranium
 /// are monthly, gold and oil settle daily — none of them gap like that, so a
@@ -158,8 +160,10 @@ fn run() -> Result<(), String> {
         Some(s) => parse_date(s).ok_or_else(|| format!("bad --today {s}"))?,
         None => today_utc(),
     };
-    let (ty, tm, td) = civil_from_days(today);
-    let base_day = days_from_civil(ty - HISTORY_YEARS, tm, td);
+    let base_day = days_from_civil(BASE.0, BASE.1, BASE.2);
+    if today <= base_day {
+        return Err(format!("today {} is not after the base date", format_date(today)));
+    }
     // the base date needs a full trailing window behind it
     let raw_from = base_day - index::TWAP_WINDOW as i64;
 

@@ -1,9 +1,9 @@
 //! the pages this tool writes into the cx subgraph.
 //!
 //! the graph holds the record: what the index is, what it read on each month
-//! of the published decade, and where every number came from.
+//! since the base date, and where every number came from.
 
-use crate::index::{Anniversary, Index};
+use crate::index::{Anniversary, Binding, Index};
 use crate::num::{civil_from_days, fdiv, format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
@@ -58,7 +58,7 @@ pub fn render_history(
     );
     body.push_str("# cx history\n\n");
     body.push_str(&format!(
-        "the published level of the [[century-index]] over the decade ending {}. \
+        "the published level of the [[century-index]] from its base date to {}. \
          one CX is the basket that cost $1 on {}; today it costs ${}. every price enters as a trailing \
          365-day average, so the series moves at the pace of a year, not a day — \
          which is what a century-scale obligation asks of it.\n\n",
@@ -71,7 +71,8 @@ pub fn render_history(
     if let Some(first) = idx.level.value_on(idx.level.start) {
         if let Some(total) = change_pct(last_level, first) {
             body.push_str(&format!(
-                "- over the decade the basket returned {}% in dollars\n",
+                "- since {} the basket returned {}% in dollars\n",
+                format_date(idx.base_day),
                 signed(total, 1)
             ));
         }
@@ -84,7 +85,7 @@ pub fn render_history(
     let high = idx.level.values.iter().max().copied().unwrap_or(0);
     let low = idx.level.values.iter().min().copied().unwrap_or(0);
     body.push_str(&format!(
-        "- the range of the decade: {} low, {} high\n\n",
+        "- the range since the base date: {} low, {} high\n\n",
         format_thousands(low, 2),
         format_thousands(high, 2)
     ));
@@ -159,20 +160,27 @@ pub fn render_history(
             crypto_now += *share;
         }
     }
+    let crypto_base = 3500i128;
+    let moved = crypto_now - crypto_base;
+    let direction = if moved >= 0 { "gained" } else { "given up" };
     body.push_str(&format!(
         "quantities never change, so shares do. the basket was written at 35% crypto, \
-         30% fiat, 35% elements; a decade of bitcoin and ether outrunning everything else \
-         leaves it at {}% crypto today. this is the arithmetic of fixed quantities, not a \
-         flaw in the fixes — but over a 25-80 year lease it is the property that decides \
-         what the obligation actually tracks. the T4 review valve exists for exactly this \
-         question, and it moves at most one leg of at most 10% weight every fifth year.\n\n",
+         30% fiat, 35% elements; since {} bitcoin and ether have {} {} points of share \
+         against the rest, leaving the basket at {}% crypto today. this is the arithmetic \
+         of fixed quantities, not a flaw in the fixes — but over a 25-80 year lease it is \
+         the property that decides what the obligation actually tracks. the T4 review valve \
+         exists for exactly this question, and it moves at most one leg of at most 10% \
+         weight every fifth year.\n\n",
+        format_date(idx.base_day),
+        direction,
+        format_fixed(moved.abs() * SCALE / 100, 1),
         format_fixed(crypto_now * SCALE / 100, 1)
     ));
 
     if let (Some(first), Some(last)) = (path.first(), path.last()) {
         body.push_str("## what a lease actually paid\n\n");
         body.push_str(&format!(
-            "the machinery of §2 run over this decade: the basket priced in bitcoin, each \
+            "the machinery of §2 run from the base date: the basket priced in bitcoin, each \
              annual step collared at +35%/−15%, the dual floor holding underneath. a lease \
              signed on {} at one CX of rent invoiced ${} in its first year and ${} in its \
              last — {}% a year, compounded.\n\n",
@@ -181,23 +189,61 @@ pub fn render_history(
             format_fixed(last.invoice, 2),
             signed(annual_rate, 1)
         ));
-        body.push_str("| year | basket in btc | rent owed | invoice |\n|---|---|---|---|\n");
+        body.push_str("| year | basket in btc | rent owed | invoice | set by |\n|---|---|---|---|---|\n");
         for a in path {
             body.push_str(&format!(
-                "| {} | {} | {} | ${} |\n",
+                "| {} | {} | {} | ${} | {} |\n",
                 format_date(a.day),
                 format_fixed(a.uncollared, 8),
                 format_fixed(a.rent_btc, 8),
-                format_thousands(a.invoice, 2)
+                format_thousands(a.invoice, 2),
+                a.binding.label()
             ));
         }
-        body.push_str(
-            "\nthe collar never engaged. bitcoin outran the basket every single year, so the \
-             sat leg of the floor bound every year instead, holding the rent at exactly its \
-             year-zero satoshi. read as the protocol reads it: whenever bitcoin outruns the \
-             basket the lease is a bitcoin-standard obligation, and this decade it was one \
-             throughout. the tenant paid in dollars whatever bitcoin did.\n\n",
+
+        // the reading is counted from the path, never asserted — the same
+        // sentence has to stay true whichever rule the years actually hit
+        let years = &path[1..];
+        let count = |b: Binding| years.iter().filter(|a| a.binding == b).count();
+        let (up, down, sat, fiat, basket) = (
+            count(Binding::CollarUp),
+            count(Binding::CollarDown),
+            count(Binding::SatFloor),
+            count(Binding::FiatFloor),
+            count(Binding::Basket),
         );
+        let plural = |n: usize| if n == 1 { "year" } else { "years" };
+        body.push_str(&format!(
+            "\nof the {} anniversaries after signing: the basket set the rent outright in {} {}, \
+             the collar capped a rise in {} and held a fall in {}, the dollar floor bound in {} \
+             and the satoshi floor in {}. ",
+            years.len(),
+            basket,
+            plural(basket),
+            up,
+            down,
+            fiat,
+            sat
+        ));
+        if fiat + sat > 0 {
+            body.push_str(
+                "where a floor bound, the tenant owed year-zero money regardless of the basket — \
+                 the dollar leg when bitcoin had fallen, the satoshi leg when it had outrun the \
+                 basket: the protocol's bitcoin-standard reading. ",
+            );
+        }
+        if down > 0 {
+            body.push_str(
+                "where the collar held a fall, the rent in sats came down 15% a year while the \
+                 basket in sats fell faster; the dollar invoice still moved with bitcoin. ",
+            );
+        }
+        if up > 0 {
+            body.push_str(
+                "where the collar capped a rise, the tenant kept the increase above 35% a year. ",
+            );
+        }
+        body.push_str("\n\n");
     }
 
     body.push_str("## today\n\n");
@@ -245,7 +291,7 @@ pub fn render_readme(idx: &Index, twaps: &[(&str, Daily)]) -> Result<String, Str
     ));
 
     body.push_str("## pages\n\n");
-    body.push_str("- [[cx history]] — the monthly level of the published decade, the quantities, the sources\n");
+    body.push_str("- [[cx history]] — the monthly level since the base date, the quantities, the sources\n");
     body.push_str("- [[century-index]] — the protocol: basket, collar, floor, contract theses\n\n");
 
     body.push_str("## how the fix is built\n\n");

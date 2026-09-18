@@ -262,7 +262,7 @@ pub fn render(
     </table>
     <div class="note">Quantities are what one CX holds. Weight is what a lease is written at; share is what the leg has become.
     Quantities were fixed on {base_date} and never change, so the shares drift with prices —
-    over this decade the basket ran to {drift}. A lease signed today starts at the weights, not the drift.
+    since {base_date} the basket has moved to {drift}. A lease signed today starts at the weights, not the drift.
     Every fix is a trailing 365-day average.</div>
   </section>
 
@@ -389,7 +389,7 @@ pub fn render(
         legs = legs_html,
         drift = drift_html,
         views = views_json,
-        calc = crate::calculator::html(indexation_default),
+        calc = crate::calculator::html(indexation_default, &format_date(idx.base_day)),
     );
 
     Ok(page)

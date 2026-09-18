@@ -269,6 +269,11 @@ fn run() -> Result<(), String> {
     let views = chart::render_views(&idx.level);
 
     let html = site::render(&idx, &twaps, &views, &indexation_default)?;
+    // a page that waits on someone else's server is a slow page: refuse it
+    let foreign = site::third_party_loads(&html);
+    if !foreign.is_empty() {
+        return Err(format!("the page loads from third parties: {}", foreign.join(", ")));
+    }
     let json = site::render_json(&idx, &twaps, &coverage);
     let history = graph::render_history(&idx, &twaps, &coverage, &path, collared_rate)?;
     let readme = graph::render_readme(&idx, &twaps)?;

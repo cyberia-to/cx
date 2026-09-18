@@ -5,6 +5,46 @@ use crate::index::{Group, Index};
 use crate::num::{format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
+/// hosts we run ourselves; a load from one of these is ours, not a third party's.
+const OWN_HOSTS: [&str; 2] = ["cyberia.my", "cyberia.to"];
+
+fn is_own_host(url: &str) -> bool {
+    let rest = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("//");
+    let host = rest.split(['/', ':', '?']).next().unwrap_or("");
+    OWN_HOSTS
+        .iter()
+        .any(|own| host == *own || host.ends_with(&format!(".{own}")))
+}
+
+/// everything the page makes the browser fetch from someone else's host.
+/// links a reader may click are theirs to follow; a stylesheet, script, font or
+/// image is loaded for them, and a third-party one stalls the page on a server
+/// we do not run — an external stylesheet also holds every inline script.
+pub fn third_party_loads(html: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for tag in html.split('<').skip(1) {
+        let tag = tag.split('>').next().unwrap_or("");
+        let name = tag.split_whitespace().next().unwrap_or("").to_ascii_lowercase();
+        let attr = match name.as_str() {
+            "link" => "href=\"",
+            "script" | "img" | "iframe" | "source" => "src=\"",
+            _ => continue,
+        };
+        if let Some((_, rest)) = tag.split_once(attr) {
+            let url = rest.split('"').next().unwrap_or("");
+            let absolute =
+                url.starts_with("http://") || url.starts_with("https://") || url.starts_with("//");
+            if absolute && !is_own_host(url) {
+                found.push(url.to_string());
+            }
+        }
+    }
+    found
+}
+
 fn group_class(g: Group) -> &'static str {
     match g {
         Group::Crypto => "crypto",
@@ -139,8 +179,11 @@ pub fn render(
 <title>CX {level} — century index · Cyberia</title>
 <meta property="og:title" content="CX — century index">
 <meta property="og:description" content="The unit of account for century-scale obligations. A fixed basket of eight world assets: whoever owes the index owes quantities, and the quantities never change.">
-<link href="https://fonts.googleapis.com/css2?family=Play:wght@400;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/play-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/play-700.woff2" as="font" type="font/woff2" crossorigin>
 <style>
+  @font-face{{font-family:'Play';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/play-400.woff2) format('woff2')}}
+  @font-face{{font-family:'Play';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/play-700.woff2) format('woff2')}}
   :root{{
     --bg:#050505;--green:#79ff4f;--cyan:#00e5ff;--ink:#f2f2f2;--mute:#8a8a8a;--line:#1f1f1f;
     --crypto:#2f9e14;--fiat:#0093ad;--elements:#c98500;
@@ -463,4 +506,33 @@ pub fn render_json(
     }
     out.push_str("\n  ]\n}\n");
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flags_what_the_browser_is_made_to_fetch_elsewhere() {
+        let html = r#"<link href="https://fonts.googleapis.com/css2?family=Play" rel="stylesheet">
+<script src="//cdn.example.com/x.js"></script><img src="https://x.example/p.png">"#;
+        assert_eq!(third_party_loads(html).len(), 3);
+    }
+
+    #[test]
+    fn a_load_from_a_host_we_run_is_ours() {
+        let html = r#"<script src="https://cyberia.to/player.js" async></script>
+<img src="https://static.cyberia.my/x.png">"#;
+        assert!(third_party_loads(html).is_empty());
+        // a lookalike is still someone else
+        let fake = r#"<script src="https://cyberia.to.evil.example/p.js"></script>"#;
+        assert_eq!(third_party_loads(fake).len(), 1);
+    }
+
+    #[test]
+    fn leaves_own_assets_and_clickable_links_alone() {
+        let html = r#"<link rel="preload" href="/fonts/play-400.woff2" as="font">
+<a href="https://fred.stlouisfed.org/">FRED</a><script>const a = "https://x";</script>"#;
+        assert!(third_party_loads(html).is_empty());
+    }
 }

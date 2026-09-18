@@ -417,7 +417,7 @@ pub fn render(
   }});
 }})();
 </script>
-<script src="https://cyberia.to/player.js" async></script>
+<script src="https://cyberia.to/player.js" async data-download="/music/atlas.shrugged.set.mp3"></script>
 </body>
 </html>
 "##,
@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn a_load_from_a_host_we_run_is_ours() {
-        let html = r#"<script src="https://cyberia.to/player.js" async></script>
+        let html = r#"<script src="https://cyberia.to/player.js" async data-download="/music/atlas.shrugged.set.mp3"></script>
 <img src="https://static.cyberia.my/x.png">"#;
         assert!(third_party_loads(html).is_empty());
         // a lookalike is still someone else

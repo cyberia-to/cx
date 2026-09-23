@@ -4,16 +4,13 @@
 //! (commit 5387526): the premium takes p of the leasehold's economics
 //! upfront, the remainder returns as indexed rent discounted at
 //! `r = r_base + spread·(1−p)` — a smaller premium shifts value into the rent
-//! stream and raises the rate, pricing the tenant's default risk. review every
-//! N years resets rent to `max(indexed path, X% × market freehold)`, where X is
-//! the initial yield, so the lessor keeps the same position in the land forever.
+//! stream and raises the rate, pricing the tenant's default risk. after year
+//! one the rent moves with the indexation alone: the protocol page carries no
+//! market review, so the pricer carries none either.
 //!
 //! the model is reparameterised on the leasehold's own value rather than the
-//! freehold behind it: the product is a right of use, never a title, and the
-//! freehold cancels out of the review target anyway — `X% × land` with
-//! `X = rent₁/freehold` is just the first year's rent carried forward at g.
-//! labels are english and the palette is the site's; the rent path is
-//! arithmetically what it was.
+//! freehold behind it: the product is a right of use, never a title. labels are
+//! english and the palette is the site's.
 
 /// the whole block. `indexation_default` seeds the indexation slider with what
 /// a lease of the base date actually paid per year, clamped into the collar
@@ -56,7 +53,7 @@ const TEMPLATE: &str = r##"<div id="lcalc"></div>
 <script>
 (function(){
 const root=document.getElementById('lcalc');
-const P={L:100000,T:25,p:20,rBase:9,spread:5,cpi:__INDEXATION__,g:10,N:5};
+const P={L:100000,T:25,p:20,rBase:9,spread:5,cpi:__INDEXATION__};
 const fmt=v=>v>=1000?'$'+(v/1000).toFixed(v>=100000?0:1)+'k':'$'+Math.round(v);
 const full=v=>'$'+Math.round(v).toLocaleString('en-US');
 const pct=(v,d=1)=>v.toFixed(d)+'%';
@@ -70,11 +67,9 @@ const DEFS=[
  ['p','Premium (share of economics)',0,100,5,'%','Yours to choose: how much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
  ['world','What the world does'],
  ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what a lease signed on __BASE__ actually paid per year, collar and floor applied'],
- ['g','Land growth g',0,20,0.5,'%','What the parcel appreciates at. Nobody sets this; Bali has historically outrun CPI'],
  ['estate','How the estate prices it'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%','The estate discount rate. Not a tenant dial — shown so the price can be checked rather than trusted'],
- ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','What the estate charges for carrying default risk as the premium shrinks'],
- ['N','Review every',1,15,1,' yr','Rent = max(indexed path, the first year carried forward at g); the lessor keeps the same position in the parcel however far the index falls behind']];
+ ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','What the estate charges for carrying default risk as the premium shrinks']];
 let html='';
 for(const d of DEFS){
  if(d.length===2){html+='<h4>'+d[1]+'</h4>';continue}
@@ -87,36 +82,26 @@ for(const d of DEFS){
 root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=out><div class=stats id=st1></div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
-+'<div class=legend><span><i style="background:var(--mut)"></i>rent tracking the parcel (target)</span>'
-+'<span><i style="background:var(--red)"></i>index only</span>'
-+'<span><i style="background:var(--amb)"></i>index + review</span></div>'
-+'<p class=note>Red is rent carried by the indexation alone. Amber adds the review clause: '
-+'at each review the rent is lifted to the grey line — the rent of the first year grown with the '
-+'parcel — so it keeps pace when the indexation falls behind. When the two grow alike the '
-+'three coincide and the review changes nothing.</p></div></div></div>';
++'<p class=note>The rent is the index and nothing else: fixed quantities, priced each year within the collar. No market review sits on top.</p></div></div></div>';
 
 function calc(){
- const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100, g=P.g/100;
+ const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100;
  const totalPV=P.L, premium=pf*totalPV, remainder=totalPV-premium;
  let A=0; for(let t=1;t<=P.T;t++) A+=Math.pow(1+cpi,t-1)/Math.pow(1+rAdj,t);
  const rent1=remainder/A, yld=rent1/P.L*100;
- const rows=[]; let bi=rent1,br=rent1;
+ const rows=[]; let bi=rent1;
  for(let t=1;t<=P.T;t++){
-  if(t>1){bi*=1+cpi;br*=1+cpi}
-  // the review target keeps the lessor's share of the parcel: the first
-  // year's rent carried forward at the growth rate
-  const target=rent1*Math.pow(1+g,t-1);
-  if(t>1&&(t-1)%P.N===0) br=Math.max(br,target);
-  rows.push([t,bi,br,target]);
+  if(t>1) bi*=1+cpi;
+  rows.push([t,bi]);
  }
  return{rAdj:rAdj*100,premium,totalPV,rent1,yld,rows};
 }
 function stat(l,v,s,c){return '<div class=stat><div class=l>'+l+'</div><div class=v'+(c?' style=color:'+c:'')+'>'+v+'</div>'+(s?'<div class=s>'+s+'</div>':'')+'</div>'}
 function chart(rows){
  const W=640,H=290,L=54,R=10,Tp=10,B=24,pw=W-L-R,ph=H-Tp-B;
- const mx=Math.max(...rows.map(r=>Math.max(r[2],r[3])))*1.06;
+ const mx=Math.max(...rows.map(r=>r[1]))*1.06;
  const x=t=>L+pw*(t-1)/Math.max(rows.length-1,1), y=v=>Tp+ph*(1-v/mx);
- const line=(i,col,dash)=>'<polyline fill=none stroke='+col+' stroke-width='+(i===2?2.2:1.5)+(dash?' stroke-dasharray="3 4"':'')
+ const line=(i,col)=>'<polyline fill=none stroke='+col+' stroke-width=2.2'
   +' points="'+rows.map(r=>x(r[0]).toFixed(1)+','+y(r[i]).toFixed(1)).join(' ')+'"/>';
  let ticks='';
  for(let i=0;i<=4;i++){const v=mx*i/4,yy=y(v);
@@ -125,7 +110,7 @@ function chart(rows){
  const step=Math.ceil(rows.length/8);
  for(let t=1;t<=rows.length;t+=step) ticks+='<text x='+x(t)+' y='+(H-6)+' text-anchor=middle>'+t+'</text>';
  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+ticks
-  +line(3,'#8a8a8a',1)+line(1,'#e06060')+line(2,'#c98500')+'</svg>';
+  +line(1,'#79ff4f')+'</svg>';
 }
 function render(){
  for(const d of DEFS){if(d.length===2)continue;const id=d[0];
@@ -150,13 +135,14 @@ mod tests {
     fn carries_the_model_and_its_controls() {
         let h = html("4", "2022-01-07");
         // every input of the original model survives the port
-        for id in ["L", "T", "p", "rBase", "spread", "cpi", "g", "N"] {
+        for id in ["L", "T", "p", "rBase", "spread", "cpi"] {
             assert!(h.contains(&format!("['{id}'")), "missing control {id}");
         }
         // the pricing identities, unchanged
         assert!(h.contains("rAdj=(P.rBase+P.spread*(1-pf))/100"));
         assert!(h.contains("A+=Math.pow(1+cpi,t-1)/Math.pow(1+rAdj,t)"));
-        assert!(h.contains("br=Math.max(br,target)"));
+        // the protocol has no market review, so neither does the pricer
+        assert!(!h.contains("target=") && !h.contains("Review every"));
     }
 
     #[test]
@@ -201,8 +187,6 @@ mod vocabulary_tests {
         assert!(h.contains("'Leasehold value today'"));
         assert!(!h.to_lowercase().contains("freehold"));
         assert!(!h.contains("Relativity"));
-        // the review target is the reparameterised identity
-        assert!(h.contains("target=rent1*Math.pow(1+g,t-1)"));
     }
 }
 
@@ -263,9 +247,9 @@ mod scope_tests {
         assert!(h.contains("Premium (first payment)"));
         assert!(h.contains("Rent, year 1"));
         assert!(h.contains("Rent path, $/yr"));
-        // the three lines are legible only if something says what they are
-        assert!(h.contains("Red is rent carried by the indexation alone"));
-        assert!(h.contains("Amber adds the review clause"));
+        // one line, and a sentence saying what it is
+        assert!(h.contains("The rent is the index and nothing else"));
+        assert!(!h.contains("Amber adds the review clause"));
         // an unescaped apostrophe here once tore the script in half
         assert!(!h.contains("\\'"), "double-escaped quote in the emitted script");
     }

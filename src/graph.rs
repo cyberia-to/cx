@@ -168,9 +168,8 @@ pub fn render_history(
          30% fiat, 35% elements; since {} bitcoin and ether have {} {} points of share \
          against the rest, leaving the basket at {}% crypto today. this is the arithmetic \
          of fixed quantities, not a flaw in the fixes — but over a 25-80 year lease it is \
-         the property that decides what the obligation actually tracks. the T4 review valve \
-         exists for exactly this question, and it moves at most one leg of at most 10% \
-         weight every fifth year.\n\n",
+         the property that decides what the obligation actually tracks: the basket rides \
+         with the world, as the quantities were written.\n\n",
         format_date(idx.base_day),
         direction,
         format_fixed(moved.abs() * SCALE / 100, 1),

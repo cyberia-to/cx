@@ -289,7 +289,6 @@ fn run() -> Result<(), String> {
     }
     let json = site::render_json(&idx, &twaps, &coverage);
     let history = graph::render_history(&idx, &twaps, &coverage, &path, collared_rate)?;
-    let readme = graph::render_readme(&idx, &twaps)?;
 
     let write = |name: &str, body: &str| -> Result<(), String> {
         let path = args.out_dir.join(name);
@@ -298,9 +297,8 @@ fn run() -> Result<(), String> {
     write("index.html", &html)?;
     write("cx.json", &json)?;
     write("history.md", &history)?;
-    write("README.md", &readme)?;
 
-    eprintln!("cx: wrote index.html, cx.json, history.md, README.md to {}", args.out_dir.display());
+    eprintln!("cx: wrote index.html, cx.json, history.md to {}", args.out_dir.display());
     Ok(())
 }
 

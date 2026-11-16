@@ -1,4 +1,4 @@
-//! the pages this tool writes into the cx subgraph.
+//! the record this tool writes into the repository, a page of the cx subgraph.
 //!
 //! the graph holds the record: what the index is, what it read on each month
 //! since the base date, and where every number came from.
@@ -266,70 +266,6 @@ pub fn render_history(
          from source by [[cx]]. generated {}.\n",
         format_date(last_day)
     ));
-
-    Ok(body)
-}
-
-pub fn render_readme(idx: &Index, twaps: &[(&str, Daily)]) -> Result<String, String> {
-    let (last_day, last_level) = idx.latest().ok_or("no index level")?;
-    let holdings = idx.holdings(twaps);
-
-    let mut body = String::new();
-    body.push_str(
-        "---\ntags: cyberia, protocol, cybernomics, cx\nalias: cx, cx index, century index fix, \
-         index publication\ncrystal-type: entity\ncrystal-domain: cyberia\n---\n",
-    );
-    body.push_str("# cx\n\n");
-    body.push_str(&format!(
-        "the published fix of the [[century-index]] — ticker CX. one CX is the basket that \
-         cost one dollar on the base date, so the level is a price: ${} on {}, against $1 \
-         on {}. the protocol page defines the instrument; this subgraph carries what it \
-         actually read.\n\n",
-        format_thousands(last_level, 2),
-        format_date(last_day),
-        format_date(idx.base_day)
-    ));
-
-    body.push_str("## pages\n\n");
-    body.push_str("- [[cx history]] — the monthly level since the base date, today's holdings, the sources\n");
-    body.push_str("- [[century-index]] — the protocol: basket, collar, floor, contract theses\n\n");
-
-    body.push_str("## how the fix is built\n\n");
-    body.push_str(
-        "1. pull each leg from its public source\n\
-         2. carry every fix onto a dense daily calendar — a closed market holds its last print\n\
-         3. average each leg over the trailing 365 days\n\
-         4. chain the weighted daily returns: each day the index earns Σ wᵢ · P̄ᵢ(t)/P̄ᵢ(t−1), \
-         the basket rebalanced to its weights every day\n\
-         5. read the death rule: a leg whose average closes below a tenth of its peak since the \
-         base date leaves the basket, weight pro rata to the rest, never to return\n\n",
-    );
-    body.push_str(
-        "the arithmetic is integer fixed-point end to end, so the same day's data yields the \
-         same level on any machine — the index is reproducible by anyone holding the sources, \
-         which is the whole point of an obligation nobody has to be trusted about.\n\n",
-    );
-
-    body.push_str("## the basket\n\n");
-    body.push_str("| leg | group | weight | of peak |\n|---|---|---|---|\n");
-    for h in holdings.iter() {
-        let of_peak = if h.alive {
-            format!("{}%", format_fixed(h.of_peak_bp * SCALE / 100, 0))
-        } else {
-            "left the basket".to_string()
-        };
-        body.push_str(&format!(
-            "| {} | {} | {}% | {} |\n",
-            h.leg.ticker,
-            h.leg.group.label(),
-            format_fixed(h.weight_bp * SCALE / 100, 0),
-            of_peak
-        ));
-    }
-    body.push_str(
-        "\nthe weights hold every day by construction. measured in itself the index is \
-         constant, so the obligation carries no numéraire; a lease owes a number of CX.\n",
-    );
 
     Ok(body)
 }

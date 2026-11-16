@@ -13,14 +13,18 @@ chain the weighted daily returns — the basket rebalanced to its weights every 
 cargo run --release -- --out out
 ```
 
-writes four artefacts:
+writes three artefacts:
 
 | file | goes to |
 |---|---|
-| `index.html` | `cyberia.my/cx` |
-| `cx.json` | `cyberia.my/cx/cx.json` |
-| `README.md` | `cyberia/protocol/cx/README.md` |
-| `history.md` | `cyberia/protocol/cx/cx history.md` |
+| `index.html` | `cx.cyberia.my` |
+| `cx.json` | `cx.cyberia.my/cx.json` |
+| `history.md` | `history.md` in this repository — the record, a page of the graph |
+
+the daily workflow in the pages repository (cyberia-to/cyberia.my,
+`cx-daily.yml`) runs this at 06:20 UTC, carries the page and the json to the
+site, and commits the record here. this repository mounts into the graph as a
+child of cyberia, so the record and the specification read as pages there.
 
 ## the index
 

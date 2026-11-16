@@ -99,65 +99,72 @@ pub fn render(
         out
     };
     let _ = first;
-    let shares = idx.current_shares(twaps);
+    let holdings = idx.holdings(twaps);
 
     let mut legs_html = String::new();
-    for (q, (leg, share)) in idx.quantities.iter().zip(shares.iter()) {
+    for h in holdings.iter() {
         let fix = twaps
             .iter()
-            .find(|(t, _)| *t == leg.ticker)
+            .find(|(t, _)| *t == h.leg.ticker)
             .and_then(|(_, d)| d.value_on(day))
             .unwrap_or(0);
+        let of_peak = if h.alive {
+            format!("{}%", format_fixed(h.of_peak_bp * SCALE / 100, 0))
+        } else {
+            "left the basket".to_string()
+        };
         legs_html.push_str(&format!(
             "<tr><td><span class=\"d {cls}\"></span>{ticker}</td>\
              <td class=\"n\">{fix}</td><td class=\"n\">{qty}</td>\
-             <td class=\"n\">{weight}%</td><td class=\"n\">{share}%</td></tr>",
-            cls = group_class(leg.group),
-            ticker = leg.ticker,
-            fix = format_thousands(fix, leg.fix_places()),
-            qty = format_thousands(q.quantity, leg.quantity_places(q.quantity)),
-            weight = leg.weight_bp / 100,
-            share = format_fixed(*share * SCALE / 100, 1),
+             <td class=\"n\">{weight}%</td><td class=\"n\">{of_peak}</td></tr>",
+            cls = group_class(h.leg.group),
+            ticker = h.leg.ticker,
+            fix = format_thousands(fix, h.leg.fix_places()),
+            qty = format_thousands(h.quantity, h.leg.quantity_places(h.quantity)),
+            weight = format_fixed(h.weight_bp * SCALE / 100, 0),
         ));
     }
 
-    // the bar shows the basket as defined — the weights a lease is written at.
-    // today's drifted shares live in the table beside them, where the two can
-    // be read against each other.
+    // the bar shows the basket as it is held today — the weights, which the
+    // daily rebalance keeps exactly; a dead leg has no segment.
     let mut bar_html = String::new();
-    for leg in crate::index::LEGS.iter() {
-        let pct = leg.weight_bp / 100;
+    for h in holdings.iter().filter(|h| h.alive) {
+        let pct = format_fixed(h.weight_bp * SCALE / 100, 0);
         bar_html.push_str(&format!(
             "<div class=\"seg {}\" style=\"flex:{}\" title=\"{} — {}%\"><i>{}</i></div>",
-            group_class(leg.group),
-            leg.weight_bp,
-            leg.ticker,
+            group_class(h.leg.group),
+            h.weight_bp,
+            h.leg.ticker,
             pct,
             pct
         ));
     }
 
     let mut group_totals = [(Group::Crypto, 0i128), (Group::Fiat, 0), (Group::Elements, 0)];
-    for leg in crate::index::LEGS.iter() {
+    for h in holdings.iter() {
         for slot in group_totals.iter_mut() {
-            if slot.0 == leg.group {
-                slot.1 += leg.weight_bp;
+            if slot.0 == h.leg.group {
+                slot.1 += h.weight_bp;
             }
         }
     }
-    let mut drift_totals = [(Group::Crypto, 0i128), (Group::Fiat, 0), (Group::Elements, 0)];
-    for (leg, share) in shares.iter() {
-        for slot in drift_totals.iter_mut() {
-            if slot.0 == leg.group {
-                slot.1 += *share;
-            }
-        }
-    }
-    let drift_html: String = drift_totals
-        .iter()
-        .map(|(g, share)| format!("{} {}%", g.label(), format_fixed(*share * SCALE / 100, 1)))
-        .collect::<Vec<_>>()
-        .join(" · ");
+    let deaths_html = if idx.deaths.is_empty() {
+        "No leg has left the basket.".to_string()
+    } else {
+        idx.deaths
+            .iter()
+            .map(|d| {
+                format!(
+                    "{} left the basket on {} — its average closed at {} against a peak of {}.",
+                    d.leg.ticker,
+                    format_date(d.day),
+                    format_thousands(d.fix, d.leg.fix_places()),
+                    format_thousands(d.peak, d.leg.fix_places())
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     let chips_html: String = group_totals
         .iter()
         .map(|(g, share)| {
@@ -178,7 +185,7 @@ pub fn render(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>CX {level} — century index · Cyberia</title>
 <meta property="og:title" content="CX — century index">
-<meta property="og:description" content="The unit of account for century-scale obligations. A fixed basket of eight world assets: whoever owes the index owes quantities, and the quantities never change.">
+<meta property="og:description" content="The unit of account for century-scale obligations. Eight world assets at fixed weights, rebalanced every day: whoever owes the index owes CX, and the weights never change.">
 <link rel="preload" href="/fonts/play-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/play-700.woff2" as="font" type="font/woff2" crossorigin>
 <style>
@@ -289,10 +296,11 @@ pub fn render(
 
   <section>
     <h2>What it is</h2>
-    <p>The unit of account for century-scale obligations. A fixed basket of eight world
-    assets: whoever owes the index owes quantities, and the quantities never change.
+    <p>The unit of account for century-scale obligations. Eight world assets at fixed
+    weights, rebalanced every day: whoever owes the index owes CX, and the weights never change.
     <span class="mute">A 25–80 year lease outlives every currency it could be written in —
-    so the payment is a portfolio instead of a number.</span></p>
+    so the payment is a portfolio instead of a number, and the portfolio is the same one
+    for everyone on every day.</span></p>
   </section>
 
   <section>
@@ -300,22 +308,22 @@ pub fn render(
     <div class="bar" role="img" aria-label="basket weights: BTC 20, ETH 15, CNY 15, USD 15, GOLD 15, CU 10, OIL 5, UX 5 percent">{bar}</div>
     <div class="chips">{chips}</div>
     <table>
-      <thead><tr><th>leg</th><th class="n">fix (USD)</th><th class="n">quantity</th><th class="n">weight</th><th class="n">share now</th></tr></thead>
+      <thead><tr><th>leg</th><th class="n">fix (USD)</th><th class="n">one CX holds</th><th class="n">weight</th><th class="n">of peak</th></tr></thead>
       <tbody>{legs}</tbody>
     </table>
-    <div class="note">Quantities are what one CX holds. Weight is what a lease is written at; share is what the leg has become.
-    Quantities were fixed on {base_date} and never change, so the shares drift with prices —
-    since {base_date} the basket has moved to {drift}. A lease signed today starts at the weights, not the drift.
-    Every fix is a trailing 365-day average.</div>
+    <div class="note">The basket is rebalanced to its weights every day, so what one CX holds changes daily
+    and the weights never do. Of peak is the death gauge: a leg whose 365-day average closes below 10% of its
+    highest average since {base_date} leaves the basket, its weight going pro rata to the rest, never to return.
+    {deaths} Every fix is a trailing 365-day average.</div>
   </section>
 
   <section>
     <h2>Definition</h2>
     <div class="formula">
-      q<sub>i</sub> = w<sub>i</sub> · R<sub>0</sub> / P<sub>i</sub>(t<sub>0</sub>)
+      I(t) = I(t−1) · Σ w<sub>i</sub> · P<sub>i</sub>(t) / P<sub>i</sub>(t−1)
       &nbsp;&nbsp;&nbsp;
-      R(t) = Σ q<sub>i</sub> · P<sub>i</sub>(t)
-      <div class="mute">quantities fixed at signing · every price a trailing 365-day average of daily fixes</div>
+      R(t) = R<sub>0</sub> · I(t) / I(t<sub>0</sub>)
+      <div class="mute">weights fixed for good, rebalanced daily · every price a trailing 365-day average of daily fixes · I = $1 on {base_date}</div>
     </div>
   </section>
 
@@ -431,7 +439,7 @@ pub fn render(
         bar = bar_html,
         chips = chips_html,
         legs = legs_html,
-        drift = drift_html,
+        deaths = deaths_html,
         views = views_json,
         calc = crate::calculator::html(indexation_default, &format_date(idx.base_day)),
     );
@@ -439,7 +447,7 @@ pub fn render(
     Ok(page)
 }
 
-/// the same fix as data: the level series, the quantities and the provenance.
+/// the same fix as data: the level series, today's holdings and the provenance.
 pub fn render_json(
     idx: &Index,
     twaps: &[(&str, Daily)],
@@ -457,36 +465,56 @@ pub fn render_json(
     out.push_str(&format!("  \"date\": \"{}\",\n", format_date(day)));
     out.push_str(&format!("  \"level\": {},\n", format_fixed(level, 4)));
     out.push_str("  \"twap_days\": 365,\n");
+    out.push_str("  \"rebalance\": \"daily\",\n");
+    out.push_str(&format!(
+        "  \"death_rule\": \"a leg leaves the basket the day its trailing average closes below {}% of its peak trailing average since the base date; weight pro rata to the rest; never returns\",\n",
+        crate::index::DEATH_BP / 100
+    ));
 
     out.push_str("  \"legs\": [\n");
-    let shares = idx.current_shares(twaps);
-    for (i, (q, (leg, share))) in idx.quantities.iter().zip(shares.iter()).enumerate() {
+    let holdings = idx.holdings(twaps);
+    for (i, h) in holdings.iter().enumerate() {
         let fix = twaps
             .iter()
-            .find(|(t, _)| *t == leg.ticker)
+            .find(|(t, _)| *t == h.leg.ticker)
             .and_then(|(_, d)| d.value_on(day))
             .unwrap_or(0);
         let cov = coverage
             .iter()
-            .find(|(t, _, _)| *t == leg.ticker)
+            .find(|(t, _, _)| *t == h.leg.ticker)
             .map(|(_, span, n)| format!("{span} ({n} observations)"))
             .unwrap_or_default();
         out.push_str(&format!(
-            "    {{\"ticker\": \"{}\", \"group\": \"{}\", \"weight_bp\": {}, \"unit\": \"{}\", \
-             \"fix\": {}, \"quantity\": {}, \"share_bp\": {}, \"source\": \"{}\", \"coverage\": \"{}\"}}{}\n",
-            leg.ticker,
-            leg.group.label(),
-            leg.weight_bp,
-            leg.unit,
+            "    {{\"ticker\": \"{}\", \"group\": \"{}\", \"weight_bp\": {}, \"live_weight_bp\": {}, \"unit\": \"{}\", \
+             \"fix\": {}, \"holds\": {}, \"of_peak_bp\": {}, \"alive\": {}, \"source\": \"{}\", \"coverage\": \"{}\"}}{}\n",
+            h.leg.ticker,
+            h.leg.group.label(),
+            h.leg.weight_bp,
+            h.weight_bp,
+            h.leg.unit,
             format_fixed(fix, 6),
-            format_fixed(q.quantity, 8),
-            share,
-            leg.source,
+            format_fixed(h.quantity, 8),
+            h.of_peak_bp,
+            h.alive,
+            h.leg.source,
             cov,
-            if i + 1 < idx.quantities.len() { "," } else { "" }
+            if i + 1 < holdings.len() { "," } else { "" }
         ));
     }
     out.push_str("  ],\n");
+
+    out.push_str("  \"deaths\": [");
+    for (i, d) in idx.deaths.iter().enumerate() {
+        out.push_str(&format!(
+            "{}{{\"ticker\": \"{}\", \"date\": \"{}\", \"peak\": {}, \"fix\": {}}}",
+            if i > 0 { ", " } else { "" },
+            d.leg.ticker,
+            format_date(d.day),
+            format_fixed(d.peak, 6),
+            format_fixed(d.fix, 6)
+        ));
+    }
+    out.push_str("],\n");
 
     out.push_str("  \"history\": [\n");
     let mut day_cursor = idx.level.start;

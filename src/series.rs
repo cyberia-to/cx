@@ -148,7 +148,7 @@ impl Daily {
 }
 
 /// sanity gate: a fix of zero or below cannot be a price, and would poison
-/// every quantity derived from it.
+/// every daily ratio derived from it.
 pub fn all_positive(daily: &Daily) -> bool {
     daily.values.iter().all(|v| *v > 0)
 }

@@ -82,7 +82,7 @@ for(const d of DEFS){
 root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=out><div class=stats id=st1></div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
-+'<p class=note>The rent is the index and nothing else: fixed quantities, priced each year within the collar. No market review sits on top.</p></div></div></div>';
++'<p class=note>The rent is the index and nothing else: fixed weights, rebalanced daily, priced each year within the collar. No market review sits on top.</p></div></div></div>';
 
 function calc(){
  const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100;

@@ -1,7 +1,7 @@
 //! century index — build the daily fix and everything published from it.
 //!
 //! the pipeline: pull public fixes → carry them onto a dense calendar →
-//! trailing 365-day average → quantities fixed at the base date → index level.
+//! trailing 365-day average → chain the weighted daily returns → index level.
 //! the arithmetic is integer fixed-point throughout, so the same day's data
 //! yields the same index on any machine.
 
@@ -21,9 +21,10 @@ use fetch::Fetcher;
 use num::{days_from_civil, format_date, parse_date, SCALE};
 use series::{all_positive, max_daily_ratio, Daily, Series};
 
-/// the base date: one CX is what the basket cost on this day. fixed, so the
-/// quantities really never change — a base that slides with the calendar would
-/// recompute them every morning while the page promised they stood still.
+/// the base date: one CX is what the basket cost on this day. with a daily
+/// rebalance the base is a normalisation and nothing more — the basket's
+/// composition is the weights on every day, whichever day the level reads $1.
+/// it also opens the death rule's record: peaks are counted from here.
 const BASE: (i64, i64, i64) = (2022, 1, 7);
 
 /// a glitch guard: no leg in this basket moves 5x in a day. copper and uranium

@@ -1,7 +1,9 @@
 # cx
 
-the daily fix of the [century index](https://cyberia.my/cx) — ticker CX, the unit
-of account for century-scale obligations.
+the daily fix of the [century index](https://cx.cyberia.my) — ticker CX, the unit
+of account for century-scale obligations. the specification is
+[specs/century-index.md](specs/century-index.md); this crate computes and
+publishes what it defines.
 
 the pipeline is four steps: pull each leg from its public source, carry every fix
 onto a dense daily calendar, average each leg over the trailing 365 days, then

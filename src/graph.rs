@@ -3,7 +3,7 @@
 //! the graph holds the record: what the index is, what it read on each month
 //! since the base date, and where every number came from.
 
-use crate::index::{Anniversary, Binding, Index};
+use crate::index::{Anniversary, Index};
 use crate::num::{civil_from_days, fdiv, format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
@@ -193,72 +193,45 @@ pub fn render_history(
     }
 
     if let (Some(first), Some(last)) = (path.first(), path.last()) {
-        body.push_str("## what a lease actually paid\n\n");
+        body.push_str("## what a lease paid\n\n");
         body.push_str(&format!(
-            "the machinery of §2 run from the base date: the basket priced in bitcoin, each \
-             annual step collared at +35%/−15%, the dual floor holding underneath. a lease \
-             signed on {} at one CX of rent invoiced ${} in its first year and ${} in its \
-             last — {}% a year, compounded.\n\n",
+            "a lease signed on {} at one CX of rent owes one CX a year; on each anniversary \
+             the index is what that CX invoiced, converted at the day's fix into the payment \
+             currency. ${} in its first year, ${} in its last — {}% a year, compounded. \
+             nothing sits between the index and the invoice: no ruler, no collar, no floor.\n\n",
             format_date(idx.base_day),
             format_fixed(first.invoice, 2),
             format_fixed(last.invoice, 2),
             signed(annual_rate, 1)
         ));
-        body.push_str("| year | basket in btc | rent owed | invoice | set by |\n|---|---|---|---|---|\n");
+        body.push_str("| anniversary | invoice per CX | year on year |\n|---|---|---|\n");
+        let mut prev: Option<i128> = None;
+        let mut largest: Option<i128> = None;
+        let mut deepest: Option<i128> = None;
         for a in path {
+            let yy = prev.and_then(|p| change_pct(a.invoice, p));
+            if let Some(v) = yy {
+                largest = Some(largest.map_or(v, |l: i128| l.max(v)));
+                deepest = Some(deepest.map_or(v, |d: i128| d.min(v)));
+            }
             body.push_str(&format!(
-                "| {} | {} | {} | ${} | {} |\n",
+                "| {} | ${} | {} |\n",
                 format_date(a.day),
-                format_fixed(a.uncollared, 8),
-                format_fixed(a.rent_btc, 8),
                 format_thousands(a.invoice, 2),
-                a.binding.label()
+                yy.map_or("—".to_string(), |v| format!("{}%", signed(v, 1)))
             ));
+            prev = Some(a.invoice);
         }
-
-        // the reading is counted from the path, never asserted — the same
-        // sentence has to stay true whichever rule the years actually hit
-        let years = &path[1..];
-        let count = |b: Binding| years.iter().filter(|a| a.binding == b).count();
-        let (up, down, sat, fiat, basket) = (
-            count(Binding::CollarUp),
-            count(Binding::CollarDown),
-            count(Binding::SatFloor),
-            count(Binding::FiatFloor),
-            count(Binding::Basket),
-        );
-        let plural = |n: usize| if n == 1 { "year" } else { "years" };
-        body.push_str(&format!(
-            "\nof the {} anniversaries after signing: the basket set the rent outright in {} {}, \
-             the collar capped a rise in {} and held a fall in {}, the dollar floor bound in {} \
-             and the satoshi floor in {}. ",
-            years.len(),
-            basket,
-            plural(basket),
-            up,
-            down,
-            fiat,
-            sat
-        ));
-        if fiat + sat > 0 {
-            body.push_str(
-                "where a floor bound, the tenant owed year-zero money regardless of the basket — \
-                 the dollar leg when bitcoin had fallen, the satoshi leg when it had outrun the \
-                 basket: the protocol's bitcoin-standard reading. ",
-            );
+        if let (Some(l), Some(d)) = (largest, deepest) {
+            body.push_str(&format!(
+                "\nthe largest annual move on this path was {}%, the deepest {}% — the \
+                 365-day average inside the index is the only collar the rent has.\n\n",
+                signed(l, 1),
+                signed(d, 1)
+            ));
+        } else {
+            body.push('\n');
         }
-        if down > 0 {
-            body.push_str(
-                "where the collar held a fall, the rent in sats came down 15% a year while the \
-                 basket in sats fell faster; the dollar invoice still moved with bitcoin. ",
-            );
-        }
-        if up > 0 {
-            body.push_str(
-                "where the collar capped a rise, the tenant kept the increase above 35% a year. ",
-            );
-        }
-        body.push_str("\n\n");
     }
 
     body.push_str(&format!(

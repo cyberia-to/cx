@@ -335,10 +335,10 @@ pub fn render(
   <section>
     <h2>Mechanics</h2>
     <ul>
+      <li>Rent — a number of CX a year, for the life of the lease; measured in the index it never changes</li>
       <li>Reset — annual, on the contract anniversary; the TWAP window ends 30 days before payment, so the tenant knows the invoice a month ahead</li>
-      <li>Ruler — bitcoin: the basket is priced in sats over the BTC/USD 365-day TWAP</li>
-      <li>Collar — +35% / −15% per year in sats; wide enough to deliver the full index path, halving the descent toward the floor</li>
-      <li>Dual floor — never fewer satoshi than year 0, never fewer year-0 dollars; whichever binds</li>
+      <li>Settlement — the CX owed are converted at that day's fix into the payment currency, never capped <span class="mute">— dollars, rupiah or satoshi are what the rent is paid in, not what it is</span></li>
+      <li>Nothing on top — no collar, no floor, no ruler: a clamp needs a unit outside the index, and that unit becomes a second bet over the basket</li>
       <li>Oracle — a daily on-chain fix; on divergence the annex computation from named public fixes prevails <span class="mute">— index disputes are arithmetic, never renegotiation</span></li>
     </ul>
   </section>
@@ -348,7 +348,7 @@ pub fn render(
     <p class="note">What the index is for. The product is a leasehold — the right to use a
     parcel for a term, never its title. Part of its value is taken as a premium at signing,
     the rest returned as rent, indexed for the life of the contract. One thing moves: the indexation, so the
-    lease can be stress-tested across the collar. The deal and the estate's underwriting are
+    lease can be stress-tested across what the index might do. The deal and the estate's underwriting are
     stated as the fixed figures they are, shown so the price can be checked rather than taken
     on faith.</p>
     {calc}

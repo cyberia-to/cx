@@ -87,18 +87,18 @@ each day the index earns the weighted return of its legs at trailing-average pri
 
 no leg has left the basket.
 
-## what a lease actually paid
+## what a lease paid
 
-the machinery of §2 run from the base date: the basket priced in bitcoin, each annual step collared at +35%/−15%, the dual floor holding underneath. a lease signed on 2022-01-07 at one CX of rent invoiced $0.99 in its first year and $2.49 in its last — +25.6% a year, compounded.
+a lease signed on 2022-01-07 at one CX of rent owes one CX a year; on each anniversary the index is what that CX invoiced, converted at the day's fix into the payment currency. $1.00 in its first year, $1.32 in its last — +7.2% a year, compounded. nothing sits between the index and the invoice: no ruler, no collar, no floor.
 
-| year | basket in btc | rent owed | invoice | set by |
-|---|---|---|---|---|
-| 2022-01-07 | 0.00002098 | 0.00002098 | $0.99 | basket |
-| 2023-01-07 | 0.00003114 | 0.00003617 | $0.99 | dollar floor |
-| 2024-01-07 | 0.00002933 | 0.00003403 | $0.99 | dollar floor |
-| 2025-01-07 | 0.00001729 | 0.00002892 | $1.93 | collar, fall held |
-| 2026-01-07 | 0.00001303 | 0.00002458 | $2.49 | collar, fall held |
+| anniversary | invoice per CX | year on year |
+|---|---|---|
+| 2022-01-07 | $1.00 | — |
+| 2023-01-07 | $0.86 | -13.9% |
+| 2024-01-07 | $0.86 | +0.1% |
+| 2025-01-07 | $1.15 | +34.5% |
+| 2026-01-07 | $1.32 | +14.1% |
 
-of the 4 anniversaries after signing: the basket set the rent outright in 0 years, the collar capped a rise in 0 and held a fall in 2, the dollar floor bound in 2 and the satoshi floor in 0. where a floor bound, the tenant owed year-zero money regardless of the basket — the dollar leg when bitcoin had fallen, the satoshi leg when it had outrun the basket: the protocol's bitcoin-standard reading. where the collar held a fall, the rent in sats came down 15% a year while the basket in sats fell faster; the dollar invoice still moved with bitcoin. 
+the largest annual move on this path was +34.5%, the deepest -13.9% — the 365-day average inside the index is the only collar the rent has.
 
 the fix is published daily at [cyberia.my/cx](https://cyberia.my/cx) and rebuilt from source by [[cx]]. generated 2026-11-16.

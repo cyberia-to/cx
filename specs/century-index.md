@@ -23,15 +23,7 @@ the basket is rebalanced to its weights every day: a leg that ran is sold back t
 
 death of a leg. buying what falls has a price: a leg going to zero would take a rebalanced index with it, geometrically, at the power of its weight. so a leg leaves the basket the day its trailing average closes below one tenth of its highest trailing average since the base date; its weight goes pro rata to the remaining legs from the next day, and it never returns. the fall that crosses the line is paid, the recovery, if any, is not collected. the most a leg can cost the index is 1 − 0.1^wᵢ: 37% for bitcoin, 29% for a 15% leg, 11% for a 5% leg. a fixed-quantity basket would have lost at most the weight itself, once — and would have drifted into whichever leg ran, which over a century is the larger failure for a unit of account.
 
-measured in itself the index is constant, so the obligation carries no numéraire. a ruler is needed only where the contract clamps and guarantees — the collar and the floor — and the ruler is bitcoin:
-
-    X(t) = BTC/USD 365-day TWAP                — the bitcoin fix
-    S(t) = I(t)/X(t)                           — the basket priced in bitcoin
-    R(t) = clamp( S(t), R(t−1)·[0.85, 1.35] )  — the sat rent, collared
-    floor:   R(t) ≥ max( S₀, F/X(t) )          — dual floor
-    invoice: R(t) · X(t), converted per T6
-
-F is the year-0 rent in dollars. the sat leg of the floor guarantees the lessor no fewer satoshi than year 0 — whenever bitcoin outruns the basket, the lease is a bitcoin-standard obligation. the fiat leg guarantees no fewer year-0 dollars when bitcoin crashes. read as one instrument: rent = S₀ sats + a call on the basket over bitcoin + a fiat tail-put. if the bitcoin fix dies through the whole T3 waterfall, the ruler reverts to USD. fixes stay USD-quoted by market convention — quote currency is bookkeeping, the ruler is the numéraire.
+measured in itself the index is constant, so the obligation carries no numéraire: the rent is R₀ CX a year, every year, and nothing sits between the index and the invoice. on the anniversary the R₀ CX are converted into the payment currency at the published fix of that day (T6) — dollars, rupiah or satoshi are the currency of settlement, never the unit of account. no collar and no floor: a clamp needs a ruler outside the index, and a ruler outside the index is a second bet laid over the basket. the smoothing lives inside the index (the 365-day average), and so does the protection (the rebalance, the death rule). a lessor who wants a floor in the settlement currency negotiates it as a separate clause and pays for it in R₀; it is not part of the index. the machines once laid on top — a bitcoin ruler, a collar in sats, a dual floor — were run against the reconstructed path and retired on 2026-11-16: `audit/rent-machine-2026-11-16.md`.
 
 ## 3. basket
 
@@ -57,16 +49,15 @@ the primary-asset rule keeps the rest out: equity indices are claims on institut
 ## 4. mechanics
 
 - reset: annual, on the contract anniversary, using the TWAP window that ends 30 days before payment — the tenant knows the invoice a month ahead
-- collar: +35%/−15% per year in sats. +35% is wide enough to deliver the full historical index path (a ±20% collar surrendered a quarter of it); −15% halves the descent toward the floor. undelivered increase does not carry over
-- settlement conversion happens after the collar and is never capped — devaluation of the local currency flows through in full
-- backtest, the [[cx]] reconstruction at trailing-average prices from the 2022-01-07 base: one CX cost $1.32 on 2026-11-16, and no leg has approached the death line (bitcoin and ether sit at 73% of their peak averages, the rest above 90%). run through the machine, a lease of the base date invoiced $1 → $1 → $1 → $1.93 → $2.49 over four anniversaries: the dollar floor held 2023 and 2024 at year-0 dollars while bitcoin was below its base, then bitcoin outran the basket — the basket in sats fell 56% over 2024–2026 — and the collar held the sat rent's descent to 15% a year while the dollar invoice rose with bitcoin. the collar is structural, not cosmetic
-- the crypto weight is the lessor's asymmetry: the floor caps downside at year-0 value, the collar meters upside, so the lessor holds a call whose value grows with basket volatility. the tenant's compensation lives in the negotiated R₀, never in the formula
+- settlement conversion is never capped — devaluation of the local currency flows through in full
+- backtest, the [[cx]] reconstruction at trailing-average prices from the 2022-01-07 base: one CX cost $1.32 on 2026-11-16, and no leg has approached the death line (bitcoin and ether sit at 73% of their peak averages, the rest above 90%). a lease of the base date invoiced, per CX a year, $1.00 → $0.86 → $0.86 → $1.16 → $1.32 on its five anniversaries — the index and nothing else. the largest annual move of the index on this path was +34.5%, the deepest −13.9%: the 365-day average is the collar
+- the tenant's and the lessor's bargain lives in the negotiated R₀, never in the formula
 
 ## 5. contract theses
 
 model clauses; the annex algorithm is the contract, reproducible by a junior accountant from public data.
 
-- T1 annex: R₀ in CX, I(t₀), the weights, the rebalance and death rule of §2, fix sources with fallbacks, collar/floor, one worked invoice. prevails over prose. model: §6.
+- T1 annex: R₀ in CX, I(t₀), the weights, the rebalance and death rule of §2, fix sources with fallbacks, the settlement currency and its fix, one worked invoice. prevails over prose. model: §6.
 - T2 fix death ≠ asset death: death of a price SOURCE triggers replacement, which must price the same asset (T3). death of the ASSET is the §2 rule and nothing else — the leg leaves at a tenth of its peak average, its weight goes pro rata to the rest, no party decides anything. a fall short of the line triggers nothing; the basket rides it.
 - T3 cessation waterfall: dead = administrator cessation, 30 days unpublished, or methodology change. then: named fallback → regulator-designated successor (LIBOR→SOFR pattern) → equivalent fix by independent expert → last TWAP frozen as a bridge, never a settlement.
 - T5 recomputation: tenant may recompute any invoice from public sources within 30 days; recomputation prevails, manifest errors corrected retroactively. index disputes are arithmetic, never renegotiation.
@@ -76,33 +67,24 @@ model clauses; the annex algorithm is the contract, reproducible by a junior acc
 
 ## 6. model annex
 
-worked example at R₀ = $100,000/yr with indicative fixes; a signed annex replaces them with the published index and the 365-day TWAP bitcoin fix at signing.
+worked example at R₀ = $100,000/yr with indicative fixes; a signed annex replaces them with the published index at signing.
 
 | parameter | value |
 |---|---|
 | R₀ (year-0 rent) | $100,000 = 80,000 CX at I(t₀) = $1.25 |
-| F (fiat floor leg) | $100,000 |
 | weights BTC/ETH/GOLD/CNY/USD/CU/OIL/UX | 20/15/15/15/15/10/5/5, rebalanced daily |
 | death rule | a leg below a tenth of its peak 365-day average since 2022-01-07 leaves, weight pro rata, never returns |
-| collar | +35% / −15% per year, in sats |
-| numéraire | BTC · fixes USD-quoted |
 | reset | annual anniversary, TWAP window ends 30 days before payment |
 | settlement | IDR at JISDOR on invoice date (UU 7/2011) |
 
 the obligation is 80,000 CX a year for the life of the contract. what one CX holds on any day is published with the fix — on the example date, wᵢ · $1.25 / P̄ᵢ of each leg — and is nobody's to set.
 
-derived: X(t₀) = $62,626 · S₀ = R₀/X(t₀) = 1.596781 BTC = 159,678,089 sats.
+worked invoice, hypothetical year-1 fix — the index at I(t₁) = $1.356291 (+8.5%), JISDOR 19,000:
 
-worked invoice, hypothetical year-1 TWAP fixes — the index at I(t₁) = $1.356291 (+8.5%), BTC $75,000, JISDOR 19,000:
+1. mark the rent to the index: 80,000 CX · $1.356291 = $108,503.30
+2. settle: × 19,000 = Rp 2,061,562,700
 
-1. mark the rent to the index: R₀ · I(t₁)/I(t₀) = 80,000 CX · $1.356291 = $108,503.30
-2. price in bitcoin: S(t₁) = 108,503.30 / 75,000 = 1.446711 BTC
-3. collar [S₀·0.85, S₀·1.35] = [1.357264, 2.155654] → 1.446711 passes unclamped
-4. dual floor: max(S₀ = 1.596781, F/X = 100,000/75,000 = 1.333333) = 1.596781 → floor BINDS
-5. R(t₁) = 1.596781 BTC = 159,678,089 sats
-6. invoice: R·X = $119,758.57 → × 19,000 = Rp 2,275,412,830
-
-reading of this year: the basket grew 8.5% but bitcoin grew 19.8% — the sat floor binds and the tenant owes the same sats as year 0, worth more dollars. the lease behaves as a bitcoin-standard obligation, exactly as designed.
+reading of this year: the basket grew 8.5%, the rent grew 8.5%. had bitcoin tripled or halved that year, the invoice would read the same — the tenant owes the basket, not any one leg of it.
 
 ## 7. oracle
 

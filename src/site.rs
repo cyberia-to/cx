@@ -60,7 +60,13 @@ pub fn render(
     indexation_default: &str,
 ) -> Result<String, String> {
     let (day, level) = idx.latest().ok_or("no index level")?;
-    let first = views.first().ok_or("no chart views")?;
+    // the page opens on the whole history: a century-scale unit is read at the
+    // pace of years, and a week of a 365-day average is a flat line
+    let default = views
+        .iter()
+        .position(|v| v.key == "all")
+        .ok_or("no 'all' chart view")?;
+    let first = &views[default];
 
     let tabs_html: String = views
         .iter()
@@ -68,7 +74,7 @@ pub fn render(
         .map(|(i, v)| {
             format!(
                 "<button class=\"tab{}\" data-range=\"{}\" role=\"tab\">{}</button>",
-                if i == 0 { " on" } else { "" },
+                if i == default { " on" } else { "" },
                 v.key,
                 v.label
             )
@@ -98,7 +104,6 @@ pub fn render(
         out.push('}');
         out
     };
-    let _ = first;
     let holdings = idx.holdings(twaps);
 
     let mut legs_html = String::new();
@@ -434,8 +439,8 @@ pub fn render(
         base_date = format_date(idx.base_day),
         tabs = tabs_html,
         readout = readout,
-        chart_svg = views[0].svg,
-        chart_labels = views[0].labels,
+        chart_svg = first.svg,
+        chart_labels = first.labels,
         bar = bar_html,
         chips = chips_html,
         legs = legs_html,

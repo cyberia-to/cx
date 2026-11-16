@@ -81,7 +81,7 @@ pub const LEGS: [Leg; 8] = [
         group: Group::Elements,
         weight_bp: 1500,
         unit: "troy oz",
-        source: "LBMA gold PM fix (USD)",
+        source: "PAXG-USD daily close, Yahoo Finance (one token = one troy ounce; LBMA PM fix as fallback)",
     },
     Leg {
         ticker: "CU",

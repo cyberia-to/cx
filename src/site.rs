@@ -345,8 +345,9 @@ pub fn render(
     <h2>Sources</h2>
     <div class="note">
       This published series is a reconstruction from free public data, not the contractual
-      annex fix: BTC and ETH from Coinbase daily closes, gold from the
-      <a href="https://prices.lbma.org.uk/">LBMA</a> PM fix, CNY from the ECB reference rate,
+      annex fix: BTC and ETH from Coinbase daily closes, gold as
+      <a href="https://paxos.com/paxg/">PAXG</a> daily closes from Yahoo Finance (one token per troy ounce; the
+      <a href="https://prices.lbma.org.uk/">LBMA</a> PM fix is the fallback), CNY from the ECB reference rate,
       Brent and the IMF copper and uranium assessments from
       <a href="https://fred.stlouisfed.org/">FRED</a>. Copper and uranium publish monthly and
       carry forward between prints. A signed lease names its own fixes with fallbacks —

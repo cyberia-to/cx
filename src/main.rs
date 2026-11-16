@@ -128,13 +128,25 @@ fn gather(f: &Fetcher, raw_from: i64, today: i64) -> Result<Vec<(&'static str, S
     usd.push(raw_from, SCALE);
     out.push(("USD", usd));
 
-    let gold_body = f
-        .get("lbma-gold-pm", fetch::LBMA_GOLD_URL)
-        .map_err(|e| e.to_string())?;
-    out.push((
-        "GOLD",
-        fetch::parse_lbma(&gold_body).map_err(|e| e.to_string())?,
-    ));
+    // gold: PAXG-USD daily closes (Yahoo Finance chart, six years in one answer) — one token is one fine troy ounce
+    // of London Good Delivery gold, the unit of the LBMA fix. the crypto-native fix is primary (century-index.md §7,
+    // v0.7); the LBMA json is the fallback, and since 2026-09-29 it answers 403 to every machine, which stopped the
+    // daily fix for seven weeks. Coinbase lists PAXG-USD too, but its candles begin too late for the base window.
+    let gold = match f
+        .get("yahoo-PAXG-USD", &fetch::yahoo_url("PAXG-USD"))
+        .map_err(|e| e.to_string())
+        .and_then(|body| fetch::parse_yahoo_chart(&body).map_err(|e| e.to_string()))
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("cx: PAXG-USD on Yahoo failed ({e}); falling back to the LBMA PM fix");
+            let gold_body = f
+                .get("lbma-gold-pm", fetch::LBMA_GOLD_URL)
+                .map_err(|e| e.to_string())?;
+            fetch::parse_lbma(&gold_body).map_err(|e| e.to_string())?
+        }
+    };
+    out.push(("GOLD", gold));
 
     for (ticker, id) in [
         ("CU", "PCOPPUSDM"),

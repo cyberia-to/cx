@@ -36,7 +36,7 @@ shapes have purpose-built parsers.
 | leg | source | cadence |
 |---|---|---|
 | BTC, ETH | Coinbase Exchange daily candles | daily |
-| GOLD | LBMA gold PM fix | daily |
+| GOLD | PAXG-USD daily close, Yahoo Finance chart (one token = one troy ounce); LBMA PM fix as fallback — LBMA has answered 403 to machines since 2026-09-29 | daily |
 | CNY | ECB reference rate via Frankfurter | daily |
 | USD | the quote currency, fixed at 1 | — |
 | OIL | Brent Europe spot via FRED | daily |

@@ -262,6 +262,43 @@ pub fn parse_coinbase_candles(body: &str) -> Result<Series, FetchError> {
     Ok(series)
 }
 
+// ---------------------------------------------------------------------------
+// Yahoo Finance chart: {"chart":{"result":[{"timestamp":[…],"indicators":{"quote":[{"close":[…]}]}}]}}
+// daily closes, six years in one answer, no key. the gold leg reads PAXG-USD here: one token is one fine
+// troy ounce of London Good Delivery gold, the unit of the LBMA fix.
+// ---------------------------------------------------------------------------
+
+pub fn yahoo_url(symbol: &str) -> String {
+    format!("https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=6y")
+}
+
+pub fn parse_yahoo_chart(body: &str) -> Result<Series, FetchError> {
+    let list = |key: &str| -> Option<&str> {
+        let (_, rest) = body.split_once(key)?;
+        rest.split_once(']').map(|(inner, _)| inner)
+    };
+    let (Some(stamps), Some(closes)) = (list("\"timestamp\":["), list("\"close\":[")) else {
+        return Err(FetchError::Parse("yahoo json had no timestamps or closes".into()));
+    };
+    let mut series = Series::new();
+    for (ts, close) in stamps.split(',').zip(closes.split(',')) {
+        let Ok(ts) = ts.trim().parse::<i64>() else {
+            continue;
+        };
+        let Some(v) = parse_fixed(close.trim()) else {
+            continue; // null: a day without a print
+        };
+        if v > 0 {
+            series.push(ts.div_euclid(86_400), v);
+        }
+    }
+    if series.is_empty() {
+        return Err(FetchError::Parse("yahoo chart held no closes".into()));
+    }
+    series.normalise();
+    Ok(series)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

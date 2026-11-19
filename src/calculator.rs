@@ -12,9 +12,9 @@
 //! freehold behind it: the product is a right of use, never a title. labels are
 //! english and the palette is the site's.
 
-/// the whole block. `indexation_default` seeds the indexation slider with what
-/// a lease of the base date actually paid per year, clamped into the collar
-/// band the slider spans; `base_date` names that date in the hint.
+/// the whole block. `indexation_default` seeds the indexation slider with the
+/// annual rate the index delivered since the base date, clamped into the
+/// stress band the slider spans; `base_date` names that date in the hint.
 pub fn html(indexation_default: &str, base_date: &str) -> String {
     TEMPLATE
         .replace("__INDEXATION__", indexation_default)
@@ -66,7 +66,7 @@ const DEFS=[
  ['T','Term',5,99,1,' yr','How many years the lease runs'],
  ['p','Premium (share of economics)',0,100,5,'%','Yours to choose: how much of the lease is paid at signing rather than carried as rent. 100% is the upfront instrument, 0% is pure rent'],
  ['world','What the world does'],
- ['cpi','Indexation',-15,35,0.5,'%','The band is the collar of the protocol: rent may rise at most 35% and fall at most 15% in a year. The default is what a lease signed on __BASE__ actually paid per year, collar and floor applied'],
+ ['cpi','Indexation',-20,40,0.5,'%','The rent is a number of CX, so it moves as the index does. The band is a stress range; the default is the annual rate the index actually delivered since __BASE__'],
  ['estate','How the estate prices it'],
  ['rBase','Base rate (at 100% premium)',5,18,0.5,'%','The estate discount rate. Not a tenant dial — shown so the price can be checked rather than trusted'],
  ['spread','Risk spread (at 0% premium)',0,10,0.5,'%','What the estate charges for carrying default risk as the premium shrinks']];
@@ -82,7 +82,7 @@ for(const d of DEFS){
 root.innerHTML='<div class=cols><div class="panel ctrl">'+html+'</div>'
 +'<div class=out><div class=stats id=st1></div>'
 +'<div class=panel><h4>Rent path, $/yr</h4><div id=lchart></div>'
-+'<p class=note>The rent is the index and nothing else: fixed quantities, priced each year within the collar. No market review sits on top.</p></div></div></div>';
++'<p class=note>The rent is the index and nothing else: a number of CX, converted once a year at the fix of the day. Nothing sits on top — no clamp, no guarantee, no market review.</p></div></div></div>';
 
 function calc(){
  const pf=P.p/100, rAdj=(P.rBase+P.spread*(1-pf))/100, cpi=P.cpi/100;
@@ -165,13 +165,14 @@ mod default_tests {
     use super::*;
 
     #[test]
-    fn the_indexation_default_is_injected_and_the_band_is_the_collar() {
+    fn the_indexation_default_is_injected_and_the_band_is_a_stress_range() {
         let h = html("35", "2022-01-07");
         assert!(h.contains("cpi:35"), "default not seeded");
         assert!(!h.contains("__INDEXATION__"), "placeholder survived");
         assert!(!h.contains("__BASE__"), "base placeholder survived");
-        assert!(h.contains("signed on 2022-01-07"), "base date not in the hint");
-        assert!(h.contains("'Indexation',-15,35,0.5"), "slider does not span the collar");
+        assert!(h.contains("since 2022-01-07"), "base date not in the hint");
+        assert!(h.contains("'Indexation',-20,40,0.5"), "slider does not span the stress band");
+        assert!(!h.contains("collar"), "the collar is gone from the pricer");
     }
 }
 

@@ -1,7 +1,7 @@
 //! century index — build the daily fix and everything published from it.
 //!
 //! the pipeline: pull public fixes → carry them onto a dense calendar →
-//! trailing 365-day average → quantities fixed at the base date → index level.
+//! trailing 365-day average → chain the weighted daily returns → index level.
 //! the arithmetic is integer fixed-point throughout, so the same day's data
 //! yields the same index on any machine.
 
@@ -13,6 +13,8 @@ mod index;
 mod num;
 mod series;
 mod site;
+#[cfg(test)]
+mod testdata;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -21,9 +23,10 @@ use fetch::Fetcher;
 use num::{days_from_civil, format_date, parse_date, SCALE};
 use series::{all_positive, max_daily_ratio, Daily, Series};
 
-/// the base date: one CX is what the basket cost on this day. fixed, so the
-/// quantities really never change — a base that slides with the calendar would
-/// recompute them every morning while the page promised they stood still.
+/// the base date: one CX is what the basket cost on this day. with a daily
+/// rebalance the base is a normalisation and nothing more — the basket's
+/// composition is the weights on every day, whichever day the level reads $1.
+/// it also opens the death rule's record: peaks are counted from here.
 const BASE: (i64, i64, i64) = (2022, 1, 7);
 
 /// a glitch guard: no leg in this basket moves 5x in a day. copper and uranium
@@ -244,26 +247,21 @@ fn run() -> Result<(), String> {
 
     let idx = index::build(&twaps, base_day).map_err(|e| e.to_string())?;
 
-    // §2 of the protocol: what a lease written on the base date would actually
-    // have invoiced, collar and floor applied
-    let btc_twap = twaps
-        .iter()
-        .find(|(t, _)| *t == "BTC")
-        .map(|(_, d)| d.clone())
-        .ok_or("no BTC series for the ruler")?;
-    let path = idx.collared_path(&btc_twap);
-    let collared_rate = idx.collared_annual_rate(&btc_twap).unwrap_or(0);
+    // §2 of the protocol: what a lease written on the base date invoiced —
+    // the index on each anniversary, nothing else
+    let path = idx.rent_path();
+    let annual_rate = idx.annual_rate().unwrap_or(0);
     if let (Some(first), Some(last)) = (path.first(), path.last()) {
         eprintln!(
-            "cx: a lease of the base date invoiced ${} → ${} over {} years ({}%/yr collared)",
+            "cx: a lease of the base date invoiced ${} → ${} over {} years ({}%/yr)",
             num::format_fixed(first.invoice, 2),
             num::format_fixed(last.invoice, 2),
             path.len() - 1,
-            num::format_fixed(collared_rate, 1)
+            num::format_fixed(annual_rate, 1)
         );
     }
-    // the slider spans the collar, so the historical rate seeds it clamped
-    let seeded = collared_rate.clamp(-15 * SCALE, 35 * SCALE);
+    // the slider spans a stress band, so the historical rate seeds it clamped
+    let seeded = annual_rate.clamp(-20 * SCALE, 40 * SCALE);
     let indexation_default = num::format_fixed(seeded - seeded % (SCALE / 2), 1);
     let (last_day, last_level) = idx
         .latest()
@@ -287,8 +285,7 @@ fn run() -> Result<(), String> {
         return Err(format!("the page loads from third parties: {}", foreign.join(", ")));
     }
     let json = site::render_json(&idx, &twaps, &coverage);
-    let history = graph::render_history(&idx, &twaps, &coverage, &path, collared_rate)?;
-    let readme = graph::render_readme(&idx, &twaps)?;
+    let history = graph::render_history(&idx, &twaps, &coverage, &path, annual_rate)?;
 
     let write = |name: &str, body: &str| -> Result<(), String> {
         let path = args.out_dir.join(name);
@@ -297,9 +294,8 @@ fn run() -> Result<(), String> {
     write("index.html", &html)?;
     write("cx.json", &json)?;
     write("history.md", &history)?;
-    write("README.md", &readme)?;
 
-    eprintln!("cx: wrote index.html, cx.json, history.md, README.md to {}", args.out_dir.display());
+    eprintln!("cx: wrote index.html, cx.json, history.md to {}", args.out_dir.display());
     Ok(())
 }
 

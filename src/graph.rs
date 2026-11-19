@@ -1,9 +1,9 @@
-//! the pages this tool writes into the cx subgraph.
+//! the record this tool writes into the repository, a page of the cx subgraph.
 //!
 //! the graph holds the record: what the index is, what it read on each month
 //! since the base date, and where every number came from.
 
-use crate::index::{Anniversary, Binding, Index};
+use crate::index::{Anniversary, Index};
 use crate::num::{civil_from_days, fdiv, format_date, format_fixed, format_thousands, SCALE};
 use crate::series::Daily;
 
@@ -90,22 +90,35 @@ pub fn render_history(
         format_thousands(high, 2)
     ));
 
-    body.push_str("## quantities\n\n");
+    let holdings = idx.holdings(twaps);
+    body.push_str("## holdings\n\n");
     body.push_str(&format!(
-        "fixed on {}, unchanged since — the obligation is these quantities, \
-         not the number they priced at.\n\n",
-        format_date(idx.base_day)
+        "what one CX holds on {} — the weights are fixed and the basket is rebalanced to \
+         them every day, so the holdings change daily and the weights never do. of peak is \
+         the death gauge: today's trailing average against the highest since the base date.\n\n",
+        format_date(last_day)
     ));
-    body.push_str("| leg | quantity | unit | fix at base | weight |\n");
-    body.push_str("|---|---|---|---|---|\n");
-    for q in &idx.quantities {
+    body.push_str("| leg | one CX holds | unit | fix | weight | of peak |\n");
+    body.push_str("|---|---|---|---|---|---|\n");
+    for h in &holdings {
+        let fix = twaps
+            .iter()
+            .find(|(t, _)| *t == h.leg.ticker)
+            .and_then(|(_, d)| d.value_on(last_day))
+            .unwrap_or(0);
+        let of_peak = if h.alive {
+            format!("{}%", format_fixed(h.of_peak_bp * SCALE / 100, 0))
+        } else {
+            "left the basket".to_string()
+        };
         body.push_str(&format!(
-            "| {} | {} | {} | {} | {}% |\n",
-            q.leg.ticker,
-            format_thousands(q.quantity, q.leg.quantity_places(q.quantity)),
-            q.leg.unit,
-            format_thousands(q.base_fix, q.leg.fix_places()),
-            format_fixed(q.leg.weight_bp * SCALE / 100, 0)
+            "| {} | {} | {} | {} | {}% | {} |\n",
+            h.leg.ticker,
+            format_thousands(h.quantity, h.leg.quantity_places(h.quantity)),
+            h.leg.unit,
+            format_thousands(fix, h.leg.fix_places()),
+            format_fixed(h.weight_bp * SCALE / 100, 0),
+            of_peak
         ));
     }
     body.push('\n');
@@ -138,13 +151,13 @@ pub fn render_history(
          per the cessation waterfall in [[century-index]].\n\n",
     );
     body.push_str("| leg | source | observed range |\n|---|---|---|\n");
-    for q in &idx.quantities {
+    for leg in crate::index::LEGS.iter() {
         let cov = coverage
             .iter()
-            .find(|(t, _, _)| *t == q.leg.ticker)
+            .find(|(t, _, _)| *t == leg.ticker)
             .map(|(_, span, n)| format!("{span} · {n} observations"))
             .unwrap_or_else(|| "—".to_string());
-        body.push_str(&format!("| {} | {} | {} |\n", q.leg.ticker, q.leg.source, cov));
+        body.push_str(&format!("| {} | {} | {} |\n", leg.ticker, leg.source, cov));
     }
     body.push_str(
         "\ncopper and uranium publish monthly and carry forward between prints, as a closed \
@@ -152,116 +165,77 @@ pub fn render_history(
          it carries the smallest weight.\n\n",
     );
 
-    body.push_str("## drift\n\n");
-    let shares = idx.current_shares(twaps);
-    let mut crypto_now = 0i128;
-    for (leg, share) in shares.iter() {
-        if leg.group == crate::index::Group::Crypto {
-            crypto_now += *share;
+    body.push_str("## rebalancing\n\n");
+    body.push_str(
+        "each day the index earns the weighted return of its legs at trailing-average \
+         prices — `I(t) = I(t−1) · Σ wᵢ · P̄ᵢ(t)/P̄ᵢ(t−1)`. a leg that ran is sold back to \
+         its weight, a leg that fell is bought back to it, so CX is the same portfolio for \
+         everyone on every day and its composition owes nothing to the base date. buying \
+         what falls has a price: a leg going to zero would take the index with it, at the \
+         power of its weight. the death rule bounds that — a leg leaves the basket the day \
+         its trailing average closes below a tenth of its highest since the base date, its \
+         weight goes pro rata to the rest, and it never returns. the most a leg can cost is \
+         1 − 0.1^w: 37% for bitcoin, 29% for a 15% leg, 11% for a 5% leg.\n\n",
+    );
+    if idx.deaths.is_empty() {
+        body.push_str("no leg has left the basket.\n\n");
+    } else {
+        for d in &idx.deaths {
+            body.push_str(&format!(
+                "- {} left the basket on {}: its trailing average closed at {} against a peak of {}\n",
+                d.leg.ticker,
+                format_date(d.day),
+                format_thousands(d.fix, d.leg.fix_places()),
+                format_thousands(d.peak, d.leg.fix_places())
+            ));
         }
+        body.push('\n');
     }
-    let crypto_base = 3500i128;
-    let moved = crypto_now - crypto_base;
-    let direction = if moved >= 0 { "gained" } else { "given up" };
-    body.push_str(&format!(
-        "quantities never change, so shares do. the basket was written at 35% crypto, \
-         30% fiat, 35% elements; since {} bitcoin and ether have {} {} points of share \
-         against the rest, leaving the basket at {}% crypto today. this is the arithmetic \
-         of fixed quantities, not a flaw in the fixes — but over a 25-80 year lease it is \
-         the property that decides what the obligation actually tracks: the basket rides \
-         with the world, as the quantities were written.\n\n",
-        format_date(idx.base_day),
-        direction,
-        format_fixed(moved.abs() * SCALE / 100, 1),
-        format_fixed(crypto_now * SCALE / 100, 1)
-    ));
 
     if let (Some(first), Some(last)) = (path.first(), path.last()) {
-        body.push_str("## what a lease actually paid\n\n");
+        body.push_str("## what a lease paid\n\n");
         body.push_str(&format!(
-            "the machinery of §2 run from the base date: the basket priced in bitcoin, each \
-             annual step collared at +35%/−15%, the dual floor holding underneath. a lease \
-             signed on {} at one CX of rent invoiced ${} in its first year and ${} in its \
-             last — {}% a year, compounded.\n\n",
+            "a lease signed on {} at one CX of rent owes one CX a year; on each anniversary \
+             the index is what that CX invoiced, converted at the day's fix into the payment \
+             currency. ${} in its first year, ${} in its last — {}% a year, compounded. \
+             nothing sits between the index and the invoice: no ruler, no collar, no floor.\n\n",
             format_date(idx.base_day),
             format_fixed(first.invoice, 2),
             format_fixed(last.invoice, 2),
             signed(annual_rate, 1)
         ));
-        body.push_str("| year | basket in btc | rent owed | invoice | set by |\n|---|---|---|---|---|\n");
+        body.push_str("| anniversary | invoice per CX | year on year |\n|---|---|---|\n");
+        let mut prev: Option<i128> = None;
+        let mut largest: Option<i128> = None;
+        let mut deepest: Option<i128> = None;
         for a in path {
+            let yy = prev.and_then(|p| change_pct(a.invoice, p));
+            if let Some(v) = yy {
+                largest = Some(largest.map_or(v, |l: i128| l.max(v)));
+                deepest = Some(deepest.map_or(v, |d: i128| d.min(v)));
+            }
             body.push_str(&format!(
-                "| {} | {} | {} | ${} | {} |\n",
+                "| {} | ${} | {} |\n",
                 format_date(a.day),
-                format_fixed(a.uncollared, 8),
-                format_fixed(a.rent_btc, 8),
                 format_thousands(a.invoice, 2),
-                a.binding.label()
+                yy.map_or("—".to_string(), |v| format!("{}%", signed(v, 1)))
             ));
+            prev = Some(a.invoice);
         }
-
-        // the reading is counted from the path, never asserted — the same
-        // sentence has to stay true whichever rule the years actually hit
-        let years = &path[1..];
-        let count = |b: Binding| years.iter().filter(|a| a.binding == b).count();
-        let (up, down, sat, fiat, basket) = (
-            count(Binding::CollarUp),
-            count(Binding::CollarDown),
-            count(Binding::SatFloor),
-            count(Binding::FiatFloor),
-            count(Binding::Basket),
-        );
-        let plural = |n: usize| if n == 1 { "year" } else { "years" };
-        body.push_str(&format!(
-            "\nof the {} anniversaries after signing: the basket set the rent outright in {} {}, \
-             the collar capped a rise in {} and held a fall in {}, the dollar floor bound in {} \
-             and the satoshi floor in {}. ",
-            years.len(),
-            basket,
-            plural(basket),
-            up,
-            down,
-            fiat,
-            sat
-        ));
-        if fiat + sat > 0 {
-            body.push_str(
-                "where a floor bound, the tenant owed year-zero money regardless of the basket — \
-                 the dollar leg when bitcoin had fallen, the satoshi leg when it had outrun the \
-                 basket: the protocol's bitcoin-standard reading. ",
-            );
+        if let (Some(l), Some(d)) = (largest, deepest) {
+            body.push_str(&format!(
+                "\nthe largest annual move on this path was {}%, the deepest {}% — the \
+                 365-day average inside the index is the only collar the rent has.\n\n",
+                signed(l, 1),
+                signed(d, 1)
+            ));
+        } else {
+            body.push('\n');
         }
-        if down > 0 {
-            body.push_str(
-                "where the collar held a fall, the rent in sats came down 15% a year while the \
-                 basket in sats fell faster; the dollar invoice still moved with bitcoin. ",
-            );
-        }
-        if up > 0 {
-            body.push_str(
-                "where the collar capped a rise, the tenant kept the increase above 35% a year. ",
-            );
-        }
-        body.push_str("\n\n");
     }
 
-    body.push_str("## today\n\n");
-    body.push_str("| leg | fix (usd) | share |\n|---|---|---|\n");
-    for (leg, share) in shares.iter() {
-        let fix = twaps
-            .iter()
-            .find(|(t, _)| *t == leg.ticker)
-            .and_then(|(_, d)| d.value_on(last_day))
-            .unwrap_or(0);
-        body.push_str(&format!(
-            "| {} | {} | {}% |\n",
-            leg.ticker,
-            format_thousands(fix, leg.fix_places()),
-            format_fixed(*share * SCALE / 100, 1)
-        ));
-    }
     body.push_str(&format!(
-        "\nthe fix is published daily at [cyberia.my/cx](https://cyberia.my/cx) and rebuilt \
+        "the fix is published daily at [cx.cyberia.my](https://cx.cyberia.my) and rebuilt \
          from source by [[cx]]. generated {}.\n",
         format_date(last_day)
     ));
@@ -269,58 +243,21 @@ pub fn render_history(
     Ok(body)
 }
 
-pub fn render_readme(idx: &Index, twaps: &[(&str, Daily)]) -> Result<String, String> {
-    let (last_day, last_level) = idx.latest().ok_or("no index level")?;
-    let shares = idx.current_shares(twaps);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut body = String::new();
-    body.push_str(
-        "---\ntags: cyberia, protocol, cybernomics, cx\nalias: cx, cx index, century index fix, \
-         index publication\ncrystal-type: entity\ncrystal-domain: cyberia\n---\n",
-    );
-    body.push_str("# cx\n\n");
-    body.push_str(&format!(
-        "the published fix of the [[century-index]] — ticker CX. one CX is the basket that \
-         cost one dollar on the base date, so the level is a price: ${} on {}, against $1 \
-         on {}. the protocol page defines the instrument; this subgraph carries what it \
-         actually read.\n\n",
-        format_thousands(last_level, 2),
-        format_date(last_day),
-        format_date(idx.base_day)
-    ));
-
-    body.push_str("## pages\n\n");
-    body.push_str("- [[cx history]] — the monthly level since the base date, the quantities, the sources\n");
-    body.push_str("- [[century-index]] — the protocol: basket, collar, floor, contract theses\n\n");
-
-    body.push_str("## how the fix is built\n\n");
-    body.push_str(
-        "1. pull each leg from its public source\n\
-         2. carry every fix onto a dense daily calendar — a closed market holds its last print\n\
-         3. average each leg over the trailing 365 days\n\
-         4. hold the quantities fixed from the base date and sum them at today's averages\n\n",
-    );
-    body.push_str(
-        "the arithmetic is integer fixed-point end to end, so the same day's data yields the \
-         same level on any machine — the index is reproducible by anyone holding the sources, \
-         which is the whole point of an obligation nobody has to be trusted about.\n\n",
-    );
-
-    body.push_str("## the basket today\n\n");
-    body.push_str("| leg | group | share | weight at base |\n|---|---|---|---|\n");
-    for (leg, share) in shares.iter() {
-        body.push_str(&format!(
-            "| {} | {} | {}% | {}% |\n",
-            leg.ticker,
-            leg.group.label(),
-            format_fixed(*share * SCALE / 100, 1),
-            format_fixed(leg.weight_bp * SCALE / 100, 0)
-        ));
+    #[test]
+    fn the_record_carries_the_year_on_year_column_and_the_death() {
+        let (idx, twaps) = crate::testdata::one_death();
+        let path = idx.rent_path();
+        let rate = idx.annual_rate().unwrap_or(0);
+        let body = render_history(&idx, &twaps, &[], &path, rate).expect("the record renders");
+        assert!(body.contains("| anniversary | invoice per CX | year on year |"));
+        // the first anniversary has nothing behind it to compare against
+        assert!(body.contains("| 1970-01-01 | $1.00 | — |"));
+        // the second carries UX's collapse, paid once and never again
+        assert!(body.contains("| 1971-01-01 | $0.95 | -4.5% |"));
+        assert!(body.contains("UX left the basket on 1970-01-03"));
     }
-    body.push_str(
-        "\nshares drift as prices move; the quantities behind them never do. measured in \
-         itself the index is constant, so the obligation carries no numéraire.\n",
-    );
-
-    Ok(body)
 }

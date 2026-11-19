@@ -203,7 +203,7 @@ pub fn page(p: &Parts) -> String {
       <a href="https://fred.stlouisfed.org/">FRED</a>. Copper and uranium publish monthly and
       carry forward between prints. A signed lease names its own fixes with fallbacks —
       see the protocol page in the graph.
-      Machine-readable: <a href="/cx/cx.json">cx.json</a>.
+      Machine-readable: <a href="/cx.json">cx.json</a>.
     </div>
   </section>
 

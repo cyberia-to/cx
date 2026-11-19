@@ -235,10 +235,29 @@ pub fn render_history(
     }
 
     body.push_str(&format!(
-        "the fix is published daily at [cyberia.my/cx](https://cyberia.my/cx) and rebuilt \
+        "the fix is published daily at [cx.cyberia.my](https://cx.cyberia.my) and rebuilt \
          from source by [[cx]]. generated {}.\n",
         format_date(last_day)
     ));
 
     Ok(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_record_carries_the_year_on_year_column_and_the_death() {
+        let (idx, twaps) = crate::testdata::one_death();
+        let path = idx.rent_path();
+        let rate = idx.annual_rate().unwrap_or(0);
+        let body = render_history(&idx, &twaps, &[], &path, rate).expect("the record renders");
+        assert!(body.contains("| anniversary | invoice per CX | year on year |"));
+        // the first anniversary has nothing behind it to compare against
+        assert!(body.contains("| 1970-01-01 | $1.00 | — |"));
+        // the second carries UX's collapse, paid once and never again
+        assert!(body.contains("| 1971-01-01 | $0.95 | -4.5% |"));
+        assert!(body.contains("UX left the basket on 1970-01-03"));
+    }
 }

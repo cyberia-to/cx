@@ -81,8 +81,8 @@ the obligation is 80,000 CX a year for the life of the contract. what one CX hol
 
 worked invoice, hypothetical year-1 fix — the index at I(t₁) = $1.356291 (+8.5%), JISDOR 19,000:
 
-1. mark the rent to the index: 80,000 CX · $1.356291 = $108,503.30
-2. settle: × 19,000 = Rp 2,061,562,700
+1. mark the rent to the index: 80,000 CX · $1.356291 = $108,503.28
+2. settle: × 19,000 = Rp 2,061,562,320
 
 reading of this year: the basket grew 8.5%, the rent grew 8.5%. had bitcoin tripled or halved that year, the invoice would read the same — the tenant owes the basket, not any one leg of it.
 
@@ -90,6 +90,6 @@ reading of this year: the basket grew 8.5%, the rent grew 8.5%. had bitcoin trip
 
 the index publishes as a daily on-chain fix at the Ethereum contract `cyberia.eth/index` — one canonical number any lease, [[marketplace]] listing, or treasury anywhere can reference. per T8 the on-chain fix is evidence and automation: on divergence the annex computation from the named public fixes prevails. the long game: the fix migrates into the [[cybergraph]] — fixed-point over the Goldilocks field per [[soft3]], signed by the publishing [[neuron]], provable by [[zheng]].
 
-what the index has actually read, day by day, lives in [[cx]] — a reconstruction from free public sources, published at [cyberia.my/cx](https://cyberia.my/cx) and recomputed daily.
+what the index has actually read, day by day, lives in [[cx]] — a reconstruction from free public sources, published at [cx.cyberia.my](https://cx.cyberia.my) and recomputed daily.
 
 \* an optional clause exists for long leases: every fifth anniversary, by mutual written consent only, one leg of at most 10% weight may be replaced at the then-current TWAP, value-neutral. the standard annex leaves it out — each review is a negotiation, and a lease that renegotiates its basket loses the certainty the index is for.

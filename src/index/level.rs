@@ -1,169 +1,17 @@
-//! the basket and the index level.
+//! the level: the daily chain of weighted returns, bounded by the death rule.
 //!
-//! the index is its weights. each day CX earns the weighted return of its
-//! legs at trailing-average prices — `I(t) = I(t−1) · Σ wᵢ · P̄ᵢ(t)/P̄ᵢ(t−1)` —
-//! so the basket is rebalanced to its weights every day and holds the same
-//! portfolio for everyone on every day, whatever the base date.
-//!
-//! daily rebalancing buys what falls, so a leg going to zero would take the
-//! index with it, geometrically at the power of its weight. the death rule
-//! bounds that: a leg leaves the basket the day its trailing average closes
-//! below a tenth of its highest trailing average since the base date, its
-//! weight goes pro rata to the rest, and it never returns.
+//! `I(t) = I(t−1) · Σ wᵢ · P̄ᵢ(t)/P̄ᵢ(t−1)`, the sum taken over the living legs
+//! and divided by their own weight — never by rounded pro-rata weights, whose
+//! truncation would bleed the level daily.
 
+use super::basket::{Death, Holding, DEATH_BP, LEGS};
 use crate::num::{fdiv, fmul, SCALE};
 use crate::series::Daily;
 
 /// one CX is what the basket cost on the base date: a dollar. the level is
-/// therefore a price — "1 CX = $1.41" — rather than an abstract index number,
+/// therefore a price — "1 CX = $1.31" — rather than an abstract index number,
 /// so a lease written at 100 CX reads straight off it.
 pub const BASE_LEVEL: i128 = SCALE;
-
-/// the trailing window of §3: every price enters as a 365-day average.
-pub const TWAP_WINDOW: usize = 365;
-
-/// the death rule of §2: a leg whose trailing average closes below this share
-/// of its peak trailing average leaves the basket. in basis points.
-pub const DEATH_BP: i128 = 1_000;
-
-/// which layer of the basket a leg belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Group {
-    Crypto,
-    Fiat,
-    Elements,
-}
-
-impl Group {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Group::Crypto => "crypto",
-            Group::Fiat => "fiat",
-            Group::Elements => "elements",
-        }
-    }
-}
-
-/// one leg of the basket: what it is, how much of the index it carries, and
-/// the unit its holding is denominated in.
-#[derive(Debug, Clone, Copy)]
-pub struct Leg {
-    pub ticker: &'static str,
-    pub group: Group,
-    /// weight in basis points of the index — integers, so the weights sum
-    /// exactly to 10_000 and no rounding drift enters the daily factor.
-    pub weight_bp: i128,
-    pub unit: &'static str,
-    pub source: &'static str,
-}
-
-/// the eight legs, in publication order.
-pub const LEGS: [Leg; 8] = [
-    Leg {
-        ticker: "BTC",
-        group: Group::Crypto,
-        weight_bp: 2000,
-        unit: "BTC",
-        source: "Coinbase BTC-USD daily close",
-    },
-    Leg {
-        ticker: "ETH",
-        group: Group::Crypto,
-        weight_bp: 1500,
-        unit: "ETH",
-        source: "Coinbase ETH-USD daily close",
-    },
-    Leg {
-        ticker: "CNY",
-        group: Group::Fiat,
-        weight_bp: 1500,
-        unit: "CNY",
-        source: "ECB reference rate via Frankfurter",
-    },
-    Leg {
-        ticker: "USD",
-        group: Group::Fiat,
-        weight_bp: 1500,
-        unit: "USD",
-        source: "quote currency, fixed at 1",
-    },
-    Leg {
-        ticker: "GOLD",
-        group: Group::Elements,
-        weight_bp: 1500,
-        unit: "troy oz",
-        source: "PAXG-USD daily close, Yahoo Finance (one token = one troy ounce; LBMA PM fix as fallback)",
-    },
-    Leg {
-        ticker: "CU",
-        group: Group::Elements,
-        weight_bp: 1000,
-        unit: "tonne",
-        source: "IMF global copper price via FRED (monthly)",
-    },
-    Leg {
-        ticker: "OIL",
-        group: Group::Elements,
-        weight_bp: 500,
-        unit: "bbl",
-        source: "Brent Europe spot via FRED (daily)",
-    },
-    Leg {
-        ticker: "UX",
-        group: Group::Elements,
-        weight_bp: 500,
-        unit: "lb U3O8",
-        source: "IMF uranium price via FRED (monthly)",
-    },
-];
-
-impl Leg {
-    /// decimals when printing this leg's fix — a yuan needs more than a barrel.
-    pub fn fix_places(&self) -> u32 {
-        match self.ticker {
-            "CNY" => 6,
-            "USD" => 0,
-            _ => 2,
-        }
-    }
-
-    /// decimals when printing a holding: enough for four significant digits,
-    /// whether the leg holds a yuan or a fraction of a tonne.
-    pub fn quantity_places(&self, value: i128) -> u32 {
-        let v = value.abs();
-        match v {
-            _ if v >= SCALE => 3,
-            _ if v >= SCALE / 100 => 5,
-            _ if v >= SCALE / 10_000 => 7,
-            _ => 9,
-        }
-    }
-}
-
-/// a leg that left the basket under the death rule.
-#[derive(Debug, Clone)]
-pub struct Death {
-    pub leg: Leg,
-    /// the day the trailing average closed below a tenth of its peak
-    pub day: i64,
-    pub peak: i128,
-    pub fix: i128,
-}
-
-/// one leg as the index holds it on its latest day.
-#[derive(Debug, Clone)]
-pub struct Holding {
-    pub leg: Leg,
-    /// the leg's weight after any deaths redistributed, in basis points;
-    /// zero for a dead leg
-    pub weight_bp: i128,
-    /// how much of the leg one CX holds today — `w · I(t) / P̄(t)`
-    pub quantity: i128,
-    /// today's trailing average as a share of the peak, in basis points —
-    /// the gauge the death rule reads
-    pub of_peak_bp: i128,
-    pub alive: bool,
-}
 
 /// the computed index: the daily level series, the base date, the peak
 /// trailing average of every leg and the deaths the rule has recorded.
@@ -206,7 +54,11 @@ impl std::fmt::Display for IndexError {
 }
 
 /// the live weights after the dead legs' weight is spread pro rata over the
-/// living — a dead leg reads zero. the sum is 10_000 while any leg lives.
+/// living — a dead leg reads zero. each share truncates to the basis point, so
+/// the sum lands at or just below 10_000, short by up to one point per living
+/// leg: 9_996 after a 15% leg dies, 9_995 after a 5% one. the daily factor
+/// never reads these — [`build`] divides by the living weight itself — so the
+/// shortfall is in the published figures and nowhere else.
 pub fn live_weights(alive: &[bool]) -> Vec<i128> {
     let total: i128 = LEGS
         .iter()
@@ -410,12 +262,6 @@ mod tests {
     }
 
     #[test]
-    fn weights_sum_to_ten_thousand_basis_points() {
-        let total: i128 = LEGS.iter().map(|l| l.weight_bp).sum();
-        assert_eq!(total, 10_000);
-    }
-
-    #[test]
     fn index_reads_base_level_on_the_base_date() {
         let series = all_flat(3);
         let index = build(&series, 0).expect("builds");
@@ -503,8 +349,11 @@ mod tests {
         assert_eq!(ux.weight_bp, 0);
         let btc = h.iter().find(|h| h.leg.ticker == "BTC").expect("BTC");
         assert_eq!(btc.weight_bp, 2000 * 10_000 / 9_500);
+        // the shares truncate to the basis point, so the published weights
+        // fall short of 100% and never run over it: 9,995 once this 5% leg
+        // is gone, at most one point short per living leg
         let live: i128 = h.iter().map(|h| h.weight_bp).sum();
-        assert!((live - 10_000).abs() < LEGS.len() as i128, "live weights sum to {live}");
+        assert_eq!(live, 9_995, "live weights sum to {live}");
     }
 
     #[test]
@@ -554,105 +403,21 @@ mod tests {
     }
 
     #[test]
+    fn an_index_whose_every_leg_has_died_refuses_to_go_on() {
+        // every leg closes below a tenth of its peak on the same day: that
+        // fall is paid, and the day after has no basket left to price
+        let mut series = all_flat(3);
+        for (_, daily) in series.iter_mut() {
+            daily.values[1] = fixed("9");
+            daily.values[2] = fixed("9");
+        }
+        assert!(matches!(build(&series, 0), Err(IndexError::EveryLegDead)));
+    }
+
+    #[test]
     fn a_century_of_flat_days_does_not_drift() {
         let series = all_flat(36_600);
         let index = build(&series, 0).expect("builds");
         assert_eq!(index.level.values[36_599], BASE_LEVEL);
-    }
-}
-
-
-/// one anniversary of a lease written on the base date: the index on that
-/// day is what one CX of rent invoiced, and nothing else sets it.
-#[derive(Debug, Clone, Copy)]
-pub struct Anniversary {
-    pub day: i64,
-    /// the index level — the invoice per CX of rent, in dollars
-    pub invoice: i128,
-}
-
-impl Index {
-    /// the rent path of §2 from the base date: one CX a year, read off the
-    /// index on each anniversary. no ruler, no collar, no floor — the audit
-    /// of 2026-11-16 retired them.
-    pub fn rent_path(&self) -> Vec<Anniversary> {
-        let (y, m, d) = crate::num::civil_from_days(self.base_day);
-        let mut out = Vec::new();
-        let mut year = 0i64;
-        loop {
-            let day = crate::num::days_from_civil(y + year, m, d);
-            let Some(invoice) = self.level.value_on(day) else { break };
-            if day > self.level.end() {
-                break;
-            }
-            out.push(Anniversary { day, invoice });
-            year += 1;
-        }
-        out
-    }
-
-    /// the annual rate the index delivered between the first and the last
-    /// anniversary, in fixed-point percent. the geometric root is floating
-    /// point — this is a figure for a slider default and a sentence of copy,
-    /// never an input to the index.
-    pub fn annual_rate(&self) -> Option<i128> {
-        let path = self.rent_path();
-        let (first, last) = (path.first()?.invoice, path.last()?.invoice);
-        if first <= 0 || path.len() < 2 {
-            return None;
-        }
-        let years = (path.len() - 1) as f64;
-        let ratio = last as f64 / first as f64;
-        let rate = ratio.powf(1.0 / years) - 1.0;
-        Some((rate * 100.0 * SCALE as f64) as i128)
-    }
-}
-
-#[cfg(test)]
-mod rent_tests {
-    use super::*;
-    use crate::num::{days_from_civil, parse_fixed};
-
-    fn fixed(s: &str) -> i128 {
-        parse_fixed(s).expect("valid number")
-    }
-
-    fn index_with(len: usize, f: impl Fn(usize) -> i128) -> Index {
-        Index {
-            base_day: days_from_civil(2016, 1, 1),
-            level: Daily {
-                start: days_from_civil(2016, 1, 1),
-                values: (0..len).map(f).collect(),
-            },
-            peaks: Vec::new(),
-            deaths: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn the_path_lands_on_anniversaries_and_reads_the_index() {
-        let idx = index_with(1500, |i| fixed("1") + i as i128 * SCALE / 1000);
-        let path = idx.rent_path();
-        assert_eq!(path.len(), 5);
-        assert_eq!(path[0].day, days_from_civil(2016, 1, 1));
-        assert_eq!(path[1].day, days_from_civil(2017, 1, 1));
-        // 2016 is a leap year: 366 days on
-        assert_eq!(path[1].invoice, fixed("1") + 366 * SCALE / 1000);
-    }
-
-    #[test]
-    fn a_flat_world_never_moves_the_invoice_and_rates_at_zero() {
-        let idx = index_with(1500, |_| fixed("1"));
-        let path = idx.rent_path();
-        assert!(path.iter().all(|a| a.invoice == fixed("1")));
-        assert_eq!(idx.annual_rate(), Some(0));
-    }
-
-    #[test]
-    fn a_doubling_over_four_years_rates_at_nineteen_percent() {
-        let idx = index_with(1500, |i| if i >= 1461 { fixed("2") } else { fixed("1") });
-        let rate = idx.annual_rate().expect("a rate");
-        // 2^(1/4) − 1 = 18.92%
-        assert!(rate > 18 * SCALE && rate < 19 * SCALE, "rate was {rate}");
     }
 }

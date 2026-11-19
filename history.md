@@ -101,4 +101,4 @@ a lease signed on 2022-01-07 at one CX of rent owes one CX a year; on each anniv
 
 the largest annual move on this path was +34.5%, the deepest -13.9% — the 365-day average inside the index is the only collar the rent has.
 
-the fix is published daily at [cyberia.my/cx](https://cyberia.my/cx) and rebuilt from source by [[cx]]. generated 2026-11-16.
+the fix is published daily at [cx.cyberia.my](https://cx.cyberia.my) and rebuilt from source by [[cx]]. generated 2026-11-16.

@@ -13,6 +13,8 @@ mod index;
 mod num;
 mod series;
 mod site;
+#[cfg(test)]
+mod testdata;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
